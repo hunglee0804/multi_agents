@@ -1,9 +1,9 @@
 from tkinter.dialog import Dialog
-from typing import Annotated, Optional, List
+from typing import Annotated, Optional, List, TypedDict
 from typing_extensions import TypedDict, Literal
 from langchain_core.messages import AnyMessage, ToolMessage
 from langgraph.graph import add_messages
-from pydantic import EmailStr
+from pydantic import EmailStr, BaseModel, Field
 
 from pydantic import BaseModel, Field
 
@@ -66,4 +66,35 @@ class RetrieveDocumentsSchema(BaseModel):
     question: str = Field(
         ..., 
         description="Detailed user query that requires searching internal documents for an answer."
+    )
+
+# ==========================================
+# TAVILY SEARCH & EXPERT SCHEMAS
+# ==========================================
+
+# State cho Agent Tavily Search
+class ResearcherState(TypedDict):
+    messages: Annotated[List[AnyMessage], add_messages]
+    current_iteration: int
+    max_iterations: int
+
+# Schema cho Tool 1
+class AIResearchSchema(BaseModel):
+    query: str = Field(
+        ...,
+        description="Detailed question regarding ML/AI theory, model architectures, or training methods."
+    )
+
+# Schema cho Tool 2
+class FinancialAnalystSchema(BaseModel):
+    query: str = Field(
+        ...,
+        description="Detailed question regarding the stock market, valuations, or investment strategies."
+    )
+
+# Schema cho Tool 3
+class WebSearchSchema(BaseModel):
+    query: str = Field(
+        ...,
+        description="Search query to look up factual information, the latest news, benchmarks, or product specifications on the internet."
     )
