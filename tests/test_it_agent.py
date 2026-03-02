@@ -13,20 +13,20 @@ from langchain_core.messages import HumanMessage
 
 def run_it_support_test():
     print("="*60)
-    print("🚀 KHỞI ĐỘNG IT SUPPORT AGENT (TAVILY + MULTI-EXPERTS) 🚀")
+    print("🚀 START IT SUPPORT AGENT (TAVILY + MULTI-EXPERTS) 🚀")
     print("="*60)
     
     # Compile đồ thị LangGraph
     app = create_it_support_agent()
     
-    print("Agent đã sẵn sàng! Gõ 'quit' hoặc 'exit' để dừng chương trình.\n")
+    print("Agent is ready! Type 'quit' or 'exit' for stopping.\n")
     
     while True:
         try:
             user_input = input("\nYou: ").strip()
             
             if user_input.lower() in ['quit', 'exit']:
-                print("Đã thoát chương trình test.")
+                print("Quit test!")
                 break
             if not user_input:
                 continue
@@ -42,7 +42,7 @@ def run_it_support_test():
                 "current_iteration": 0
             }
 
-            print("\n⏳ Agent đang lập kế hoạch và tìm kiếm...")
+            print("\n⏳ Agent is planning and searching...")
             
             # Chạy workflow
             result = app.invoke(initial_state)
@@ -53,9 +53,9 @@ def run_it_support_test():
             print("-" * 60)
 
         except KeyboardInterrupt:
-            sys.exit("\n\nChương trình bị ngắt bởi người dùng. Tạm biệt!")
+            sys.exit("\n\nProgram is interrupted. Good bye!")
         except Exception as e:
-            print(f"\n❌ Đã xảy ra lỗi: {e}")
+            print(f"\n❌ Occured error: {e}")
 
 if __name__ == "__main__":
     run_it_support_test()

@@ -274,6 +274,9 @@ def retrieve_documents_tool(question: str) -> str:
 
     docs = retrive_documents(question)
 
+    if not docs:
+        return "No relevant internal documents found for this query."
+
     context = "\n\n".join(
         f"[Doc {i+1}]\n{doc.page_content}"
         for i, doc in enumerate(docs)

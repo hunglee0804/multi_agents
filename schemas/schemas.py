@@ -61,6 +61,16 @@ def pop_dialog_state(state: AgenticState):
     }
 
 
+# ==========================================
+# FAQ AGENT (REACT) SCHEMAS
+# ==========================================
+
+class FAQState(TypedDict):
+    """State riêng biệt dành cho FAQ Agent (ReAct)"""
+    messages: Annotated[List[AnyMessage], add_messages]
+    current_iteration: int
+    max_iterations: int
+
 
 class RetrieveDocumentsSchema(BaseModel):
     question: str = Field(
@@ -78,23 +88,24 @@ class ResearcherState(TypedDict):
     current_iteration: int
     max_iterations: int
 
-# Schema cho Tool 1
+# Schema Tool 1
 class AIResearchSchema(BaseModel):
     query: str = Field(
         ...,
         description="Detailed question regarding ML/AI theory, model architectures, or training methods."
     )
 
-# Schema cho Tool 2
+# Schema Tool 2
 class FinancialAnalystSchema(BaseModel):
     query: str = Field(
         ...,
         description="Detailed question regarding the stock market, valuations, or investment strategies."
     )
 
-# Schema cho Tool 3
+# Schema Tool 3
 class WebSearchSchema(BaseModel):
     query: str = Field(
         ...,
         description="Search query to look up factual information, the latest news, benchmarks, or product specifications on the internet."
     )
+
