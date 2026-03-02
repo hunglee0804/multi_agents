@@ -48,7 +48,7 @@ class SupervisorState(TypedDict):
 class RouterSchema(BaseModel):
     """Schema to strictly enforce the LLM's routing decisions."""
     # FUTURE: Add "ticket_agent" and "booking_agent" to this Literal list
-    next: Literal["FINISH", "faq_agent", "it_support_agent"]
+    next: Literal["FINISH", "faq_agent", "it_support_agent", "ticket_agent"]
 
 # ==========================================
 # 3. NODE DEFINITIONS
@@ -155,7 +155,7 @@ def create_master_runner():
     # Route back to the supervisor after a sub-agent finishes its task
     workflow.add_edge("faq_agent", END)
     workflow.add_edge("it_support_agent", END)
-    workflow.add_edge("ticket_agent", "supervisor")
+    workflow.add_edge("ticket_agent", END)
     # FUTURE: workflow.add_edge("booking_agent", "supervisor")
 
     return workflow.compile()
