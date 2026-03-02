@@ -2,6 +2,7 @@ import sys
 import os
 import operator
 from typing import Annotated, Sequence, TypedDict, Literal
+import uuid
 
 # ==========================================
 # 1. PATH SETUP & IMPORTS
@@ -25,14 +26,13 @@ from multi_agents.config.variable import CHATBOT_MODEL
 from multi_agents.agents.faq_agent import create_retrieval_agent
 from multi_agents.agents.it_support_agent import create_it_support_agent
 from multi_agents.agents.ticket_support_agent import create_ticket_support_agent
-# FUTURE: Import new agents here when they are ready
-# from multi_agents.agents.booking_agent import create_booking_agent
+from multi_agents.agents.booking_agent import create_booking_agent
 
 # Initialize sub-agents
 faq_agent = create_retrieval_agent()
 it_support_agent = create_it_support_agent()
 ticket_agent = create_ticket_support_agent()
-# FUTURE: booking_agent = create_booking_agent()
+booking_agent = create_booking_agent()
 
 # ==========================================
 # 2. SUPERVISOR STATE & SCHEMAS
@@ -44,11 +44,12 @@ class SupervisorState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], operator.add]
     # The identifier of the next agent to be called
     next: str
+    session_id: str
 
 class RouterSchema(BaseModel):
     """Schema to strictly enforce the LLM's routing decisions."""
     # FUTURE: Add "ticket_agent" and "booking_agent" to this Literal list
-    next: Literal["FINISH", "faq_agent", "it_support_agent", "ticket_agent"]
+    next: Literal["FINISH", "faq_agent", "it_support_agent", "ticket_agent", "booking_agent"]
 
 # ==========================================
 # 3. NODE DEFINITIONS
@@ -68,12 +69,13 @@ def supervisor_node(state: SupervisorState) -> dict:
         "- faq_agent: Specialized in reading internal company documents, policies, HR rules, and guidelines.\n"
         "- it_support_agent: Specialized ONLY in searching the EXTERNAL WEB for public information, market data, news, or product benchmarks using Tavily search. DO NOT use this for internal company IT issues.\n"
         "- ticket_agent: Specialized in Internal IT Helpdesk. Route here IMMEDIATELY if the user wants to 'create a ticket', report a broken device (hardware/software), request IT support, or check ticket status in the database.\n"
-        # FUTURE: Add short descriptions for booking_agent here
+        "- booking_agent: Specialized in Booking Management. Route here if the user wants to book a meeting room, schedule a workspace, or check room booking status.\n"
         "\n"
         "CRITICAL ROUTING RULES:\n"
         "1. If the user mentions 'ticket' (e.g., create, submit, check ticket) or reports a technical issue needing repair, YOU MUST ROUTE TO 'ticket_agent'.\n"
         "2. If the user asks to compare products or find news, ROUTE TO 'it_support_agent'.\n"
         "3. If the user's request has been fully answered in the conversation history, or if it is just a greeting/farewell, you MUST route to FINISH. Do NOT route back to an agent."
+        "4. If the user's request has been fully answered in the conversation history, or if it is just a greeting/farewell, you MUST route to FINISH. Do NOT route back to an agent."
     )
 
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
@@ -121,6 +123,18 @@ def ticket_node(state: SupervisorState) -> dict:
     result = ticket_agent.invoke(initial_sub_state)
     return {"messages": [result["messages"][-1]]}
 
+def booking_node(state: SupervisorState) -> dict:
+    """Wrapper node to execute the Booking Agent subgraph."""
+    print("\n   [Supervisor] 🔀 Routing to -> BOOKING AGENT")
+    initial_sub_state = {
+        "messages": state["messages"],
+        "current_iteration": 0,
+        "max_iterations": 3,
+        "session_id": state["session_id"]
+    }
+    result = booking_agent.invoke(initial_sub_state)
+    return {"messages": [result["messages"][-1]]}
+
 # ==========================================
 # 4. GRAPH COMPILATION
 # ==========================================
@@ -134,7 +148,7 @@ def create_master_runner():
     workflow.add_node("faq_agent", faq_node)
     workflow.add_node("it_support_agent", it_support_node)
     workflow.add_node("ticket_agent", ticket_node)
-    # FUTURE: workflow.add_node("booking_agent", booking_node)
+    workflow.add_node("booking_agent", booking_node)
 
     # Set the starting point
     workflow.add_edge(START, "supervisor")
@@ -147,7 +161,7 @@ def create_master_runner():
             "faq_agent": "faq_agent",
             "it_support_agent": "it_support_agent",
             "ticket_agent": "ticket_agent",
-            # FUTURE: "booking_agent": "booking_agent",
+            "booking_agent": "booking_agent",
             "FINISH": END
         }
     )
@@ -156,7 +170,7 @@ def create_master_runner():
     workflow.add_edge("faq_agent", END)
     workflow.add_edge("it_support_agent", END)
     workflow.add_edge("ticket_agent", END)
-    # FUTURE: workflow.add_edge("booking_agent", "supervisor")
+    workflow.add_edge("booking_agent", END)
 
     return workflow.compile()
 
@@ -166,7 +180,7 @@ def create_master_runner():
 
 if __name__ == "__main__":
     app = create_master_runner()
-    
+    current_session = f"SESSION_{uuid.uuid4().hex[:6].upper()}"
     print("="*60)
     print("🚀 MASTER CHATBOT RUNNER INITIALIZED 🚀")
     print("="*60)
@@ -186,7 +200,10 @@ if __name__ == "__main__":
 
             # Append user input to history
             chat_history.append(HumanMessage(content=user_input))
-            initial_state = {"messages": chat_history}
+            initial_state = {
+                "messages": chat_history,
+                "session_id": current_session
+                }
             
             print("\n⏳ Supervisor is analyzing and routing...")
             

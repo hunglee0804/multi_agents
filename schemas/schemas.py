@@ -87,6 +87,7 @@ class ResearcherState(TypedDict):
     messages: Annotated[List[AnyMessage], add_messages]
     current_iteration: int
     max_iterations: int
+    
 
 # Schema Tool 1
 class AIResearchSchema(BaseModel):
@@ -119,6 +120,7 @@ class TicketState(TypedDict):
     messages: Annotated[List[AnyMessage], add_messages]
     current_iteration: int
     max_iterations: int
+    session_id: str
 
 class CreateTicketSchema(BaseModel):
     """Schema for creating a new IT support ticket."""
@@ -144,4 +146,46 @@ class CheckTicketSchema(BaseModel):
     ticket_id: str = Field(
         ..., 
         description="The unique ticket identifier (e.g., 'TKT-XXXXXX')."
+    )
+
+
+# ==========================================
+# BOOKING AGENT SCHEMAS
+# ==========================================
+
+class BookingState(TypedDict):
+    """State exclusively for the Booking Agent."""
+    messages: Annotated[List[AnyMessage], add_messages]
+    current_iteration: int
+    max_iterations: int
+    session_id: str
+
+class CreateBookingSchema(BaseModel):
+    """Schema for creating a new room booking."""
+    user_id: str = Field(
+        default="unknown_user",
+        description="The ID of the user. Can be default if not explicitly provided."
+    )
+    email: str = Field(
+        default="unknown@fpt.com",
+        description="The email of the user. Can be default if not explicitly provided."
+    )
+    room_name: str = Field(
+        ..., 
+        description="The name of the meeting room to book (e.g., 'Room A', 'Conference Room 1')."
+    )
+    start_time: str = Field(
+        ..., 
+        description="The start time of the booking (format: YYYY-MM-DD HH:MM)."
+    )
+    end_time: str = Field(
+        ..., 
+        description="The end time of the booking (format: YYYY-MM-DD HH:MM)."
+    )
+
+class CheckBookingSchema(BaseModel):
+    """Schema for checking the status of an existing room booking."""
+    booking_id: str = Field(
+        ..., 
+        description="The unique booking identifier (e.g., 'BKG-XXXXXX')."
     )

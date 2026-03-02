@@ -35,7 +35,31 @@ def init_database():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    
+    # Create the Bookings Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS bookings (
+            booking_id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            email TEXT NOT NULL,
+            room_name TEXT NOT NULL,
+            start_time TIMESTAMP NOT NULL,
+            end_time TIMESTAMP NOT NULL,
+            status TEXT DEFAULT 'Confirmed',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Create the Conversation Context Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS conversation_context (
+            session_id TEXT PRIMARY KEY,
+            user_id TEXT,
+            email TEXT,
+            current_intent TEXT,
+            extracted_parameters TEXT,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
     conn.commit()
     conn.close()
     print(f"✅ Database initialized successfully at: {SQLITE_DB_PATH}")
