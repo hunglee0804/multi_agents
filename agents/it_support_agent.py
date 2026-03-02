@@ -53,6 +53,10 @@ def should_continue(state: ResearcherState) -> str:
     """
     last_message = state["messages"][-1]
 
+    # If the iteration larger than max iteration, return it
+    if state.get("current_iteration", 0) >= state.get("max_iterations", 3):
+        return "end"
+
     # If LLM calls a tool, we need to continue to execute that tool
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         return "use_tools"

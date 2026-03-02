@@ -31,7 +31,14 @@ def web_search_expert(query: str) -> str:
     try:
         response = tavily_search_tool.invoke(query)
         output = []
-        for r in response.get("results", []):
+        if isinstance(response, list):
+            results = response
+        elif isinstance(response, dict):
+            results = response.get("results", [])
+        else:
+            results = []
+
+        for r in results:
             content = r.get("content", "")
             url = r.get("url", "")
             output.append(f"Content: {content} | URL: {url}")
