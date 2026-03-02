@@ -24,15 +24,14 @@ from multi_agents.config.variable import CHATBOT_MODEL
 # Import compiled sub-agents
 from multi_agents.agents.faq_agent import create_retrieval_agent
 from multi_agents.agents.it_support_agent import create_it_support_agent
-
+from multi_agents.agents.ticket_support_agent import create_ticket_support_agent
 # FUTURE: Import new agents here when they are ready
-# from multi_agents.agents.ticket_support_agent import create_ticket_support_agent
 # from multi_agents.agents.booking_agent import create_booking_agent
 
 # Initialize sub-agents
 faq_agent = create_retrieval_agent()
 it_support_agent = create_it_support_agent()
-# FUTURE: ticket_support_agent = create_ticket_support_agent()
+ticket_agent = create_ticket_support_agent()
 # FUTURE: booking_agent = create_booking_agent()
 
 # ==========================================
@@ -62,16 +61,19 @@ def supervisor_node(state: SupervisorState) -> dict:
     """
     llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0)
     
-    # System prompt defining the exact roles of each sub-agent
+    # System prompt ĐÃ ĐƯỢC TỐI ƯU HÓA RẤT MẠNH ĐỂ CHỐNG XUNG ĐỘT NGỮ NGHĨA
     system_prompt = (
-        "You are a master supervisor managing a team of specialized AI agents.\n"
+        "You are a Master Supervisor managing a team of specialized AI agents.\n"
         "Your team members are:\n"
-        "- faq_agent: Specialized in searching internal company policies, rules, and local documents.\n"
-        "- it_support_agent: Specialized in searching the web for real-time data, technical specs, and financial info.\n"
-        # FUTURE: Add short descriptions for ticket_agent and booking_agent here
+        "- faq_agent: Specialized in reading internal company documents, policies, HR rules, and guidelines.\n"
+        "- it_support_agent: Specialized ONLY in searching the EXTERNAL WEB for public information, market data, news, or product benchmarks using Tavily search. DO NOT use this for internal company IT issues.\n"
+        "- ticket_agent: Specialized in Internal IT Helpdesk. Route here IMMEDIATELY if the user wants to 'create a ticket', report a broken device (hardware/software), request IT support, or check ticket status in the database.\n"
+        # FUTURE: Add short descriptions for booking_agent here
         "\n"
-        "Analyze the user's latest message and route the request to the most appropriate agent.\n"
-        "If the user's request has been fully answered, or if it is just a simple greeting/farewell, route to FINISH."
+        "CRITICAL ROUTING RULES:\n"
+        "1. If the user mentions 'ticket' (e.g., create, submit, check ticket) or reports a technical issue needing repair, YOU MUST ROUTE TO 'ticket_agent'.\n"
+        "2. If the user asks to compare products or find news, ROUTE TO 'it_support_agent'.\n"
+        "3. If the user's request has been fully answered in the conversation history, or if it is just a greeting/farewell, you MUST route to FINISH. Do NOT route back to an agent."
     )
 
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
@@ -83,6 +85,7 @@ def supervisor_node(state: SupervisorState) -> dict:
 
 def faq_node(state: SupervisorState) -> dict:
     """Wrapper node to execute the FAQ Agent subgraph."""
+    print("\n   [Supervisor] 🔀 Routing to -> FAQ AGENT")
     initial_sub_state = {
         "messages": state["messages"],
         "current_iteration": 0,
@@ -95,6 +98,7 @@ def faq_node(state: SupervisorState) -> dict:
 
 def it_support_node(state: SupervisorState) -> dict:
     """Wrapper node to execute the IT Support Agent subgraph."""
+    print("\n   [Supervisor] 🔀 Routing to -> IT SUPPORT AGENT")
     initial_sub_state = {
         "messages": state["messages"],
         "current_iteration": 0,
@@ -103,6 +107,18 @@ def it_support_node(state: SupervisorState) -> dict:
     # Invoke the Tavily Search sub-graph
     result = it_support_agent.invoke(initial_sub_state)
     # Extract only the final response message to append to the master state
+    return {"messages": [result["messages"][-1]]}
+
+def ticket_node(state: SupervisorState) -> dict:
+    """Wrapper node to execute the Ticket Support Agent subgraph."""
+    print("\n   [Supervisor] 🔀 Routing to -> TICKET SUPPORT AGENT")
+    initial_sub_state = {
+        "messages": state["messages"],
+        "current_iteration": 0,
+        "max_iterations": 3
+    }
+    # Invoke the Ticket Database sub-graph
+    result = ticket_agent.invoke(initial_sub_state)
     return {"messages": [result["messages"][-1]]}
 
 # ==========================================
@@ -117,7 +133,7 @@ def create_master_runner():
     workflow.add_node("supervisor", supervisor_node)
     workflow.add_node("faq_agent", faq_node)
     workflow.add_node("it_support_agent", it_support_node)
-    # FUTURE: workflow.add_node("ticket_agent", ticket_node)
+    workflow.add_node("ticket_agent", ticket_node)
     # FUTURE: workflow.add_node("booking_agent", booking_node)
 
     # Set the starting point
@@ -130,7 +146,7 @@ def create_master_runner():
         {
             "faq_agent": "faq_agent",
             "it_support_agent": "it_support_agent",
-            # FUTURE: "ticket_agent": "ticket_agent",
+            "ticket_agent": "ticket_agent",
             # FUTURE: "booking_agent": "booking_agent",
             "FINISH": END
         }
@@ -139,7 +155,7 @@ def create_master_runner():
     # Route back to the supervisor after a sub-agent finishes its task
     workflow.add_edge("faq_agent", END)
     workflow.add_edge("it_support_agent", END)
-    # FUTURE: workflow.add_edge("ticket_agent", "supervisor")
+    workflow.add_edge("ticket_agent", "supervisor")
     # FUTURE: workflow.add_edge("booking_agent", "supervisor")
 
     return workflow.compile()

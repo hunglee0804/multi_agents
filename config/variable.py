@@ -16,3 +16,8 @@ TAVILY_SEARCH_DEPTH = "advanced"
 
 # Workflow Graph
 MAX_ITERATIONS = 3
+
+# ==========================================
+# DATABASE & TICKET VARIABLES
+# ==========================================
+SQLITE_DB_PATH = "./database/support_system.db"

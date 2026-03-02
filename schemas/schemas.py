@@ -109,3 +109,39 @@ class WebSearchSchema(BaseModel):
         description="Search query to look up factual information, the latest news, benchmarks, or product specifications on the internet."
     )
 
+
+# ==========================================
+# TICKET SUPPORT AGENT SCHEMAS
+# ==========================================
+
+class TicketState(TypedDict):
+    """State exclusively for the Ticket Support Agent."""
+    messages: Annotated[List[AnyMessage], add_messages]
+    current_iteration: int
+    max_iterations: int
+
+class CreateTicketSchema(BaseModel):
+    """Schema for creating a new IT support ticket."""
+    user_id: str = Field(
+        default="unknown_user", 
+        description="The ID of the user. Can be default if not explicitly provided."
+    )
+    email: str = Field(
+        default="unknown@fpt.com", 
+        description="The email of the user. Can be default if not explicitly provided."
+    )
+    issue_category: str = Field(
+        ..., 
+        description="The category of the issue (e.g., 'Hardware', 'Software', 'Network', 'Access')."
+    )
+    description: str = Field(
+        ..., 
+        description="A detailed description of the user's technical issue."
+    )
+
+class CheckTicketSchema(BaseModel):
+    """Schema for checking the status of an existing ticket."""
+    ticket_id: str = Field(
+        ..., 
+        description="The unique ticket identifier (e.g., 'TKT-XXXXXX')."
+    )
