@@ -4,7 +4,7 @@ import uuid
 from typing import Literal
 
 # ==========================================
-# 1. PATH SETUP & IMPORTS
+# PATH SETUP & IMPORTS
 # ==========================================
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
@@ -14,47 +14,44 @@ from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
 
-# Import configurations
 from multi_agents.config.config import *
 from multi_agents.config.variable import CHATBOT_MODEL
 from multi_agents.schemas.schemas import AgenticState
 
-# Import sub-agents
 from multi_agents.agents.faq_agent import create_retrieval_agent
 from multi_agents.agents.it_support_agent import create_it_support_agent
 from multi_agents.agents.ticket_support_agent import create_ticket_support_agent
 from multi_agents.agents.booking_agent import create_booking_agent
 
-# Initialize sub-agents
 faq_agent = create_retrieval_agent()
 it_support_agent = create_it_support_agent()
 ticket_agent = create_ticket_support_agent()
 booking_agent = create_booking_agent()
 
 # ==========================================
-# 2. TRANSFER TOOLS FOR PRIMARY ASSISTANT
+# TRANSFER TOOLS FOR PRIMARY ASSISTANT
 # ==========================================
-# These tools allow the Primary Assistant to delegate tasks.
 
 @tool
 def transfer_to_faq_agent() -> str:
-    """Use this to answer questions about internal company policies, rules, and HR documents."""
+    """Transfer to FAQ Agent for internal company policies, rules, and HR documents."""
     return "Transferred to FAQ Agent"
 
 @tool
 def transfer_to_it_agent() -> str:
-    """Use this to search the EXTERNAL web for public tech news, product specs, or market benchmarks."""
+    """Transfer to IT Support Agent for EXTERNAL web search, tech news, or benchmarks."""
     return "Transferred to IT Support Agent"
 
 @tool
 def transfer_to_ticket_agent() -> str:
-    """Use this to help the user create an IT support ticket or check ticket status."""
+    """Transfer to Ticket Support Agent to create IT tickets or check ticket status."""
     return "Transferred to Ticket Support Agent"
 
 @tool
 def transfer_to_booking_agent() -> str:
-    """Use this to help the user book a meeting room or check booking status."""
+    """Transfer to Booking Agent to book a meeting room or check booking status."""
     return "Transferred to Booking Agent"
 
 primary_tools = [
@@ -65,155 +62,157 @@ primary_tools = [
 ]
 
 # ==========================================
-# 3. NODE DEFINITIONS
+# NODE DEFINITIONS
 # ==========================================
 
 def primary_assistant_node(state: AgenticState) -> dict:
-    """
-    The Primary Assistant handles general chit-chat directly.
-    If it needs specialized help, it calls a transfer tool.
-    """
     llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0).bind_tools(primary_tools)
     
     system_prompt = (
         "You are a helpful and friendly Primary Assistant at FPT Software.\n"
         "Your job is to greet users, answer simple questions directly, and route complex tasks to your specialized team members using the provided transfer tools.\n"
-        "If the user says 'Hello' or asks 'Who are you?', answer them directly and warmly WITHOUT calling any tools."
+        "If the user says 'Hello' or asks 'Who are you?', answer them directly WITHOUT calling tools."
     )
     
+    # The checkpointer automatically provides the full message history in state["messages"]
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
     response = llm.invoke(messages)
-    
     return {"messages": [response]}
 
-# Wrapper nodes for sub-agents
-def execute_sub_agent(agent_app, state: AgenticState, agent_name: str) -> dict:
-    """Helper to execute a sub-agent and manage state properly."""
-    print(f"\n   [Primary] 🔀 Delegating to -> {agent_name}")
+def execute_sub_agent(agent_app, state: AgenticState, agent_name: str, node_name: str) -> dict:
+    """Executes the sub-agent and pushes it to the dialog stack if entered for the first time."""
+    print(f"\n   [System] 🔄 Executing {agent_name}...")
     
     last_message = state["messages"][-1]
     tool_messages = []
-
+    
+    # Resolve pending tool calls to satisfy OpenAI API requirements
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         for tool_call in last_message.tool_calls:
             tool_messages.append(
                 ToolMessage(
-                    content=f"Successfully transferred to {agent_name}",
+                    content=f"Successfully transferred to {agent_name}.",
                     name=tool_call["name"],
                     tool_call_id=tool_call["id"]
                 )
             )
 
-    # Pass the resolved history (including the ToolMessage) to the sub-agent
+    # Pass history to sub-agent
     initial_sub_state = {
         "messages": list(state["messages"]) + tool_messages,
         "current_iteration": 0,
         "max_iterations": 3,
-        "session_id": state["session_id"]
+        "conversation_id": state.get("conversation_id", "default")
     }
-    
     result = agent_app.invoke(initial_sub_state)
     
-    # Return the ToolMessages AND the sub-agent's final answer to the master state
-    return {
-        "messages": tool_messages + [result["messages"][-1]],
-        "dialog_state": "pop"
-    }
+    updates = {"messages": tool_messages + [result["messages"][-1]]}
+    
+    # Push this agent to the dialog stack
+    current_dialog = state.get("dialog_state", [])
+    if not current_dialog or current_dialog[-1] != node_name:
+        updates["dialog_state"] = node_name
+        
+    return updates
 
-def faq_node(state: AgenticState) -> dict:
-    return execute_sub_agent(faq_agent, state, "FAQ AGENT")
+def faq_node(state: AgenticState) -> dict: return execute_sub_agent(faq_agent, state, "FAQ AGENT", "enter_faq")
+def it_support_node(state: AgenticState) -> dict: return execute_sub_agent(it_support_agent, state, "IT SUPPORT AGENT", "enter_it")
+def ticket_node(state: AgenticState) -> dict: return execute_sub_agent(ticket_agent, state, "TICKET SUPPORT AGENT", "enter_ticket")
+def booking_node(state: AgenticState) -> dict: return execute_sub_agent(booking_agent, state, "BOOKING AGENT", "enter_booking")
 
-def it_support_node(state: AgenticState) -> dict:
-    return execute_sub_agent(it_support_agent, state, "IT SUPPORT AGENT")
-
-def ticket_node(state: AgenticState) -> dict:
-    return execute_sub_agent(ticket_agent, state, "TICKET SUPPORT AGENT")
-
-def booking_node(state: AgenticState) -> dict:
-    return execute_sub_agent(booking_agent, state, "BOOKING AGENT")
+def leave_skill(state: AgenticState) -> dict:
+    """Pop the dialog state to return control to the Primary Assistant."""
+    print("\n   [System] 🔙 Task completed. Returning to Primary Assistant (leave_skill)...")
+    return {"dialog_state": "pop"}
 
 # ==========================================
-# 4. ROUTING LOGIC
+# CONDITIONAL ROUTING LOGIC
 # ==========================================
+
+def route_start(state: AgenticState) -> str:
+    """Route directly to the active agent in the dialog stack if one exists."""
+    if state.get("dialog_state"):
+        active_agent = state["dialog_state"][-1]
+        print(f"\n   [Router] 📍 Resuming conversation with: {active_agent}")
+        return active_agent
+    print("\n   [Router] 📍 Routing to Primary Assistant")
+    return "primary_assistant"
 
 def route_primary_assistant(state: AgenticState) -> str:
-    """
-    Determines where to go after the Primary Assistant responds.
-    """
+    """Route to the specific sub-agent node if a tool was called."""
     last_message = state["messages"][-1]
-    
-    # If the Primary Assistant called a transfer tool, route to that specific agent
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         tool_name = last_message.tool_calls[0]["name"]
-        if tool_name == "transfer_to_faq_agent":
-            return "enter_faq"
-        elif tool_name == "transfer_to_it_agent":
-            return "enter_it"
-        elif tool_name == "transfer_to_ticket_agent":
-            return "enter_ticket"
-        elif tool_name == "transfer_to_booking_agent":
-            return "enter_booking"
-            
-    # If no tools were called, it's a direct conversation (e.g., greeting). We end the turn.
+        if tool_name == "transfer_to_faq_agent": return "enter_faq"
+        elif tool_name == "transfer_to_it_agent": return "enter_it"
+        elif tool_name == "transfer_to_ticket_agent": return "enter_ticket"
+        elif tool_name == "transfer_to_booking_agent": return "enter_booking"
     return END
 
+def route_sub_agent(state: AgenticState) -> str:
+    """
+    Evaluates if the sub-agent should stay active or return to Primary.
+    If it asks a question (?), it stays active to wait for user input (END).
+    Otherwise, the task is considered done, and it triggers leave_skill.
+    """
+    last_message = state["messages"][-1].content
+    if "?" in last_message:
+        return END
+    return "leave_skill"
+
 # ==========================================
-# 5. GRAPH COMPILATION
+# GRAPH COMPILATION WITH CHECKPOINTER
 # ==========================================
 
 def create_hierarchical_runner():
-    """Builds and compiles the hierarchical master workflow."""
     builder = StateGraph(AgenticState)
 
-    # Add Primary Assistant
     builder.add_node("primary_assistant", primary_assistant_node)
-
-    # Add Sub-Agent Nodes
     builder.add_node("enter_faq", faq_node)
     builder.add_node("enter_it", it_support_node)
     builder.add_node("enter_ticket", ticket_node)
     builder.add_node("enter_booking", booking_node)
+    builder.add_node("leave_skill", leave_skill)
 
-    # Set Entry Point
-    builder.add_edge(START, "primary_assistant")
+    builder.add_conditional_edges(START, route_start)
 
-    # Primary routing conditional edges
     builder.add_conditional_edges(
-        "primary_assistant",
-        route_primary_assistant,
-        {
-            "enter_faq": "enter_faq",
-            "enter_it": "enter_it",
-            "enter_ticket": "enter_ticket",
-            "enter_booking": "enter_booking",
-            END: END
-        }
+        "primary_assistant", 
+        route_primary_assistant, 
+        ["enter_faq", "enter_it", "enter_ticket", "enter_booking", END]
     )
 
-    # Sub-agents always return control back to the Primary Assistant
-    builder.add_edge("enter_faq", "primary_assistant")
-    builder.add_edge("enter_it", "primary_assistant")
-    builder.add_edge("enter_ticket", "primary_assistant")
-    builder.add_edge("enter_booking", "primary_assistant")
+    sub_agents = ["enter_faq", "enter_it", "enter_ticket", "enter_booking"]
+    for agent in sub_agents:
+        builder.add_conditional_edges(agent, route_sub_agent, ["leave_skill", END])
 
-    return builder.compile()
+    builder.add_edge("leave_skill", "primary_assistant")
+
+    # Initialize Memory Checkpointer
+    memory = MemorySaver()
+
+    # Compile with checkpointer attached
+    return builder.compile(checkpointer=memory)
 
 # ==========================================
-# 6. INTERACTIVE TESTING LOOP
+# INTERACTIVE TESTING LOOP
 # ==========================================
 
 if __name__ == "__main__":
     app = create_hierarchical_runner()
-    current_session = f"SESSION_{uuid.uuid4().hex[:6].upper()}"
+    current_conversation_id = f"SESSION_{uuid.uuid4().hex[:6].upper()}"
+    
+    # Configuration object specifying the thread/session ID for the checkpointer
+    config = {"configurable": {"thread_id": current_conversation_id}}
     
     print("="*60)
-    print("🚀 HIERARCHICAL MASTER CHATBOT INITIALIZED 🚀")
-    print(f"🔑 Session ID: {current_session}")
+    print("🚀 HIERARCHICAL MASTER CHATBOT INITIALIZED (WITH MEMORY) 🚀")
+    print(f"🔑 Session ID: {current_conversation_id}")
     print("="*60)
     
-    chat_history = []
+    # Look, mom! No more manual chat_history array!
     
-while True:
+    while True:
         try:
             user_input = input("\nYou: ").strip()
             if user_input.lower() in ['quit', 'exit']:
@@ -221,24 +220,19 @@ while True:
             if not user_input:
                 continue
 
-            chat_history.append(HumanMessage(content=user_input))
-            initial_state = {
-                "messages": chat_history,
-                "dialog_state": [],
-                "session_id": current_session
+            # Only pass the NEW message. The checkpointer handles the rest based on thread_id.
+            input_state = {
+                "messages": [HumanMessage(content=user_input)],
+                "conversation_id": current_conversation_id
             }
             
-            print("\n⏳ Primary Assistant is processing...")
+            # Invoke the graph using the input state and the thread config
+            result = app.invoke(input_state, config=config)
             
-            result = app.invoke(initial_state)
-            
-            # Extract the final answer and print
+            # The result contains the fully appended message history
             assistant_message = result["messages"][-1]
             print(f"\n🤖 Assistant:\n{assistant_message.content}")
             print("-" * 60)
-            
-            # Cleanly append only the final text response to the chat history
-            chat_history.append(assistant_message)
 
         except KeyboardInterrupt:
             sys.exit("\n\nProcess interrupted by user.")

@@ -41,13 +41,13 @@ def reasoner_node(state: TicketState) -> dict:
     Now injected with Conversation Context Memory.
     """
     messages = list(state["messages"]) # Create a safe copy
-    session_id = state.get("session_id", "default_session")
+    conversation_id = state.get("conversation_id", "default_session")
     
     # Retrieve memory from Database
-    context_data = get_conversation_context(session_id)
+    context_data = get_conversation_context(conversation_id)
     
     # Build the context injection string
-    context_msg = f"\n\n--- DATABASE CONTEXT (Session: {session_id}) ---\n"
+    context_msg = f"\n\n--- DATABASE CONTEXT (Session: {conversation_id}) ---\n"
     if context_data:
         context_msg += f"Known User ID: {context_data.get('user_id', 'Unknown')}\n"
         context_msg += f"Known Email: {context_data.get('email', 'Unknown')}\n"

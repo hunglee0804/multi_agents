@@ -27,24 +27,26 @@ def init_database():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tickets (
             ticket_id TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL,
-            email TEXT NOT NULL,
-            issue_category TEXT NOT NULL,
+            content TEXT NOT NULL,
             description TEXT NOT NULL,
-            status TEXT DEFAULT 'Open',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            customer_name TEXT NOT NULL,
+            customer_phone TEXT NOT NULL,
+            email TEXT,
+            status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending', 'Resolving', 'Canceled', 'Finished')),
+            time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     # Create the Bookings Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS bookings (
             booking_id TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL,
-            email TEXT NOT NULL,
-            room_name TEXT NOT NULL,
-            start_time TIMESTAMP NOT NULL,
-            end_time TIMESTAMP NOT NULL,
-            status TEXT DEFAULT 'Confirmed',
+            customer_name TEXT NOT NULL,
+            customer_phone TEXT NOT NULL,
+            email TEXT,
+            reason TEXT NOT NULL,
+            time TIMESTAMP NOT NULL,
+            note TEXT,
+            status TEXT DEFAULT 'Scheduled' CHECK(status IN ('Scheduled', 'Canceled', 'Finished')),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -52,12 +54,11 @@ def init_database():
     # Create the Conversation Context Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversation_context (
-            session_id TEXT PRIMARY KEY,
+            conversation_id TEXT PRIMARY KEY,
             user_id TEXT,
             email TEXT,
-            current_intent TEXT,
-            extracted_parameters TEXT,
-            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     conn.commit()

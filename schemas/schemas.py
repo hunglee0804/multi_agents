@@ -5,8 +5,6 @@ from langchain_core.messages import AnyMessage, ToolMessage
 from langgraph.graph import add_messages
 from pydantic import EmailStr, BaseModel, Field
 
-from pydantic import BaseModel, Field
-
 DIALOG_ROLE = Literal[
     "primary_assistant",
     "ticket_agent",
@@ -28,7 +26,7 @@ class AgenticState(TypedDict):
     """Shared master state for the hierarchical multi-agent system."""
     messages: Annotated[List[AnyMessage], add_messages]
     dialog_state: Annotated[List[str], update_dialog_stack]
-    session_id: str
+    conversation_id: str
 
     
 def pop_dialog_state(state: AgenticState):
@@ -50,6 +48,14 @@ def pop_dialog_state(state: AgenticState):
         "messages" : messages,
     }
 
+# ==========================================
+# CONTEXT MANAGER SCHEMAS
+# ==========================================
+class UpdateContextSchema(BaseModel):
+    """Schema for updating the conversation context (user identity)."""
+    conversation_id: str = Field(..., description="The current conversation ID.")
+    user_id: str = Field(default=None, description="The user's ID if known.")
+    email: str = Field(default=None, description="The user's email if known.")
 
 # ==========================================
 # FAQ AGENT (REACT) SCHEMAS
@@ -100,7 +106,6 @@ class WebSearchSchema(BaseModel):
         description="Search query to look up factual information, the latest news, benchmarks, or product specifications on the internet."
     )
 
-
 # ==========================================
 # TICKET SUPPORT AGENT SCHEMAS
 # ==========================================
@@ -110,33 +115,24 @@ class TicketState(TypedDict):
     messages: Annotated[List[AnyMessage], add_messages]
     current_iteration: int
     max_iterations: int
-    session_id: str
+    conversation_id: str
 
 class CreateTicketSchema(BaseModel):
     """Schema for creating a new IT support ticket."""
-    user_id: str = Field(
-        default="unknown_user", 
-        description="The ID of the user. Can be default if not explicitly provided."
-    )
-    email: str = Field(
-        default="unknown@fpt.com", 
-        description="The email of the user. Can be default if not explicitly provided."
-    )
-    issue_category: str = Field(
-        ..., 
-        description="The category of the issue (e.g., 'Hardware', 'Software', 'Network', 'Access')."
-    )
-    description: str = Field(
-        ..., 
-        description="A detailed description of the user's technical issue."
-    )
+    content: str = Field(..., description="A short summary or title of the ticket content.")
+    description: str = Field(..., description="A detailed description of the issue.")
+    customer_name: str = Field(..., description="The full name of the customer.")
+    customer_phone: str = Field(..., description="The phone number of the customer.")
+    email: str = Field(default=None, description="The email of the customer (optional).")
 
 class CheckTicketSchema(BaseModel):
     """Schema for checking the status of an existing ticket."""
-    ticket_id: str = Field(
-        ..., 
-        description="The unique ticket identifier (e.g., 'TKT-XXXXXX')."
-    )
+    ticket_id: str = Field(..., description="The unique ticket identifier (e.g., 'TKT-XXXXXX').")
+
+class UpdateTicketStatusSchema(BaseModel):
+    """Schema for updating the status of an existing ticket."""
+    ticket_id: str = Field(..., description="The unique ticket identifier (e.g., 'TKT-XXXXXX').")
+    new_status: str = Field(..., description="The new status. MUST be exactly one of: 'Pending', 'Resolving', 'Canceled', 'Finished'.")
 
 
 # ==========================================
@@ -148,34 +144,22 @@ class BookingState(TypedDict):
     messages: Annotated[List[AnyMessage], add_messages]
     current_iteration: int
     max_iterations: int
-    session_id: str
+    conversation_id: str # ĐÃ SỬA SESSION_ID THÀNH CONVERSATION_ID Ở ĐÂY
 
 class CreateBookingSchema(BaseModel):
-    """Schema for creating a new room booking."""
-    user_id: str = Field(
-        default="unknown_user",
-        description="The ID of the user. Can be default if not explicitly provided."
-    )
-    email: str = Field(
-        default="unknown@fpt.com",
-        description="The email of the user. Can be default if not explicitly provided."
-    )
-    room_name: str = Field(
-        ..., 
-        description="The name of the meeting room to book (e.g., 'Room A', 'Conference Room 1')."
-    )
-    start_time: str = Field(
-        ..., 
-        description="The start time of the booking (format: YYYY-MM-DD HH:MM)."
-    )
-    end_time: str = Field(
-        ..., 
-        description="The end time of the booking (format: YYYY-MM-DD HH:MM)."
-    )
+    """Schema for creating a new booking."""
+    customer_name: str = Field(..., description="The full name of the customer.")
+    customer_phone: str = Field(..., description="The phone number of the customer.")
+    email: str = Field(default=None, description="The email of the customer (optional).")
+    reason: str = Field(..., description="The reason or purpose for the booking.")
+    time: str = Field(..., description="The requested booking time (format: YYYY-MM-DD HH:MM).")
+    note: str = Field(default=None, description="Any additional notes or special requests (optional).")
 
 class CheckBookingSchema(BaseModel):
-    """Schema for checking the status of an existing room booking."""
-    booking_id: str = Field(
-        ..., 
-        description="The unique booking identifier (e.g., 'BKG-XXXXXX')."
-    )
+    """Schema for checking the status of an existing booking."""
+    booking_id: str = Field(..., description="The unique booking identifier (e.g., 'BKG-XXXXXX').")
+
+class UpdateBookingStatusSchema(BaseModel):
+    """Schema for updating the status of an existing booking."""
+    booking_id: str = Field(..., description="The unique booking identifier (e.g., 'BKG-XXXXXX').")
+    new_status: str = Field(..., description="The new status. MUST be exactly one of: 'Scheduled', 'Canceled', 'Finished'.")
