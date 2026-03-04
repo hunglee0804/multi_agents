@@ -91,18 +91,32 @@ def execute_sub_agent(agent_app, state: AgenticState, agent_name: str) -> dict:
     """Helper to execute a sub-agent and manage state properly."""
     print(f"\n   [Primary] 🔀 Delegating to -> {agent_name}")
     
-    # We pass only the messages and session_id to the sub-agent
+    last_message = state["messages"][-1]
+    tool_messages = []
+
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        for tool_call in last_message.tool_calls:
+            tool_messages.append(
+                ToolMessage(
+                    content=f"Successfully transferred to {agent_name}",
+                    name=tool_call["name"],
+                    tool_call_id=tool_call["id"]
+                )
+            )
+
+    # Pass the resolved history (including the ToolMessage) to the sub-agent
     initial_sub_state = {
-        "messages": state["messages"],
+        "messages": list(state["messages"]) + tool_messages,
         "current_iteration": 0,
         "max_iterations": 3,
         "session_id": state["session_id"]
     }
+    
     result = agent_app.invoke(initial_sub_state)
     
-    # Return the final message and pop the dialog state to return control to Primary
+    # Return the ToolMessages AND the sub-agent's final answer to the master state
     return {
-        "messages": [result["messages"][-1]],
+        "messages": tool_messages + [result["messages"][-1]],
         "dialog_state": "pop"
     }
 
@@ -199,7 +213,7 @@ if __name__ == "__main__":
     
     chat_history = []
     
-    while True:
+while True:
         try:
             user_input = input("\nYou: ").strip()
             if user_input.lower() in ['quit', 'exit']:
@@ -217,21 +231,14 @@ if __name__ == "__main__":
             print("\n⏳ Primary Assistant is processing...")
             
             result = app.invoke(initial_state)
-            assistant_message = result["messages"][-1]
             
+            # Extract the final answer and print
+            assistant_message = result["messages"][-1]
             print(f"\n🤖 Assistant:\n{assistant_message.content}")
             print("-" * 60)
             
-            # Save history but clean up tool calls to prevent context pollution
-            if hasattr(assistant_message, "tool_calls") and assistant_message.tool_calls:
-                # Add a dummy tool response so LangChain doesn't break in the next turn
-                chat_history.append(assistant_message)
-                chat_history.append(ToolMessage(
-                    content="Task delegated successfully.", 
-                    tool_call_id=assistant_message.tool_calls[0]["id"]
-                ))
-            else:
-                chat_history.append(assistant_message)
+            # Cleanly append only the final text response to the chat history
+            chat_history.append(assistant_message)
 
         except KeyboardInterrupt:
             sys.exit("\n\nProcess interrupted by user.")
