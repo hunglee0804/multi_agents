@@ -20,9 +20,16 @@ from multi_agents.config.prompt import TICKET_AGENT_PROMPT
 from multi_agents.schemas.schemas import TicketState
 from multi_agents.tools.ticket_tool import TICKET_ALL_TOOLS
 
-# Initialize the LLM and bind the ticket tools
+# NEW IMPORTS FOR CONTEXT
+from multi_agents.tools.context_tool import update_context_tool
+from multi_agents.context_injection.context_manager import get_conversation_context
+
+# Combine ticket tools with the new context tool
+ALL_TOOLS = TICKET_ALL_TOOLS + [update_context_tool]
+
+# Initialize the LLM and bind the combined tools
 llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0)
-llm_with_tools = llm.bind_tools(TICKET_ALL_TOOLS)
+llm_with_tools = llm.bind_tools(ALL_TOOLS)
 
 # ==========================================
 # NODE DEFINITIONS
@@ -31,15 +38,33 @@ llm_with_tools = llm.bind_tools(TICKET_ALL_TOOLS)
 def reasoner_node(state: TicketState) -> dict:
     """
     The core reasoning node for the Ticket Support Agent.
-    It evaluates the conversation history and decides whether to call a tool or respond directly.
+    Now injected with Conversation Context Memory.
     """
-    messages = state["messages"]
+    messages = list(state["messages"]) # Create a safe copy
+    session_id = state.get("session_id", "default_session")
     
-    # Ensure the SystemMessage is present to strictly guide the agent's behavior
-    if not any(isinstance(m, SystemMessage) for m in messages):
-        messages = [SystemMessage(content=TICKET_AGENT_PROMPT)] + messages
+    # Retrieve memory from Database
+    context_data = get_conversation_context(session_id)
+    
+    # Build the context injection string
+    context_msg = f"\n\n--- DATABASE CONTEXT (Session: {session_id}) ---\n"
+    if context_data:
+        context_msg += f"Known User ID: {context_data.get('user_id', 'Unknown')}\n"
+        context_msg += f"Known Email: {context_data.get('email', 'Unknown')}\n"
+        context_msg += f"Saved Params: {context_data.get('extracted_parameters', {})}\n"
+    else:
+        context_msg += "No prior data saved yet.\n"
+    
+    context_msg += "\nINSTRUCTION: If you learn new details (like user_id, email, or issue category), use 'update_context_tool' to save them. Use the known data above to avoid asking the user again for information they already provided!"
 
-    # Invoke the LLM with the bound tools
+    # Override/Inject the SystemMessage
+    full_prompt = TICKET_AGENT_PROMPT + context_msg
+    if messages and isinstance(messages[0], SystemMessage):
+        messages[0] = SystemMessage(content=full_prompt)
+    else:
+        messages.insert(0, SystemMessage(content=full_prompt))
+
+    # Invoke the LLM
     response = llm_with_tools.invoke(messages)
     
     return {
@@ -53,16 +78,15 @@ def should_continue(state: TicketState) -> str:
     """
     last_message = state["messages"][-1]
     
-    # 1. Hard stop to prevent infinite loops and save API tokens
+    # Hard stop to prevent infinite loops
     if state.get("current_iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
         print("\n   [TICKET SYSTEM] ⚠️ Max iterations reached. Forcing the agent to stop.")
         return "end"
 
-    # 2. If the LLM decided to call a tool, route to the 'tools' node
+    # If the LLM decided to call a tool, route to the 'tools' node
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         return "use_tools"
 
-    # 3. Otherwise, the LLM has generated a final response for the user
     return "end"
 
 # ==========================================
@@ -72,18 +96,14 @@ def should_continue(state: TicketState) -> str:
 def create_ticket_support_agent():
     """
     Builds and compiles the LangGraph workflow for the Ticket Support Agent.
-    Returns a compiled, runnable application.
     """
     workflow = StateGraph(TicketState)
     
-    # Add all necessary nodes
     workflow.add_node("reasoner", reasoner_node)
-    workflow.add_node("tools", ToolNode(TICKET_ALL_TOOLS))
+    workflow.add_node("tools", ToolNode(ALL_TOOLS)) # Use ALL_TOOLS here
 
-    # Set the starting point
     workflow.set_entry_point("reasoner")
 
-    # Add conditional edges from the reasoner to evaluate the LLM's decision
     workflow.add_conditional_edges(
         "reasoner",
         should_continue,
@@ -93,10 +113,8 @@ def create_ticket_support_agent():
         }
     )
 
-    # After a tool executes (e.g., database query), always return to the reasoner to analyze the result
     workflow.add_edge("tools", "reasoner")
 
-    # Compile the graph
     app = workflow.compile()
     
     return app

@@ -37,10 +37,10 @@ def reasoner_node(state: BookingState) -> dict:
     messages = list(state["messages"]) # Tạo bản sao để an toàn
     session_id = state.get("session_id", "default_session")
     
-    # 1. Lấy dữ liệu trí nhớ từ Database
+    # Take the memory from Database
     context_data = get_conversation_context(session_id)
     
-    # 2. Tạo chuỗi nhắc nhở cho LLM
+    # Create notice sequence for LLM
     context_msg = f"\n\n--- DATABASE CONTEXT (Session: {session_id}) ---\n"
     if context_data:
         context_msg += f"Known User ID: {context_data.get('user_id', 'Unknown')}\n"
@@ -51,7 +51,7 @@ def reasoner_node(state: BookingState) -> dict:
     
     context_msg += "\nINSTRUCTION: If you learn new details, use 'update_context_tool' to save them. Use the known data above to avoid asking the user again for information they already provided!"
 
-    # 3. Ghi đè SystemMessage để luôn cập nhật trí nhớ mới nhất
+    # Override SystemMessage to always update the latest memory
     full_prompt = BOOKING_AGENT_PROMPT + context_msg
     if messages and isinstance(messages[0], SystemMessage):
         messages[0] = SystemMessage(content=full_prompt)
@@ -71,16 +71,16 @@ def should_continue(state: BookingState) -> str:
     """
     last_message = state["messages"][-1]
     
-    # 1. Hard stop to prevent infinite loops
+    # Hard stop to prevent infinite loops
     if state.get("current_iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
         print("\n   [BOOKING SYSTEM] ⚠️ Max iterations reached. Forcing the agent to stop.")
         return "end"
 
-    # 2. If the LLM decided to call a tool, route to the 'tools' node
+    # If the LLM decided to call a tool, route to the 'tools' node
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         return "use_tools"
 
-    # 3. Otherwise, the LLM has generated a final response
+    # Otherwise, the LLM has generated a final response
     return "end"
 
 # ==========================================
@@ -96,7 +96,7 @@ def create_booking_agent():
     
     # Add nodes
     workflow.add_node("reasoner", reasoner_node)
-    workflow.add_node("tools", ToolNode(BOOKING_ALL_TOOLS))
+    workflow.add_node("tools", ToolNode(ALL_TOOLS))
 
     # Set entry point
     workflow.set_entry_point("reasoner")
