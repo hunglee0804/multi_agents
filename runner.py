@@ -4,7 +4,7 @@ import uuid
 from typing import Literal
 
 # ==========================================
-# PATH SETUP & IMPORTS
+# 1. PATH SETUP & IMPORTS
 # ==========================================
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
@@ -31,7 +31,7 @@ ticket_agent = create_ticket_support_agent()
 booking_agent = create_booking_agent()
 
 # ==========================================
-# TRANSFER TOOLS FOR PRIMARY ASSISTANT
+# 2. TRANSFER TOOLS FOR PRIMARY ASSISTANT
 # ==========================================
 
 @tool
@@ -62,31 +62,31 @@ primary_tools = [
 ]
 
 # ==========================================
-# NODE DEFINITIONS
+# 3. NODE DEFINITIONS
 # ==========================================
 
 def primary_assistant_node(state: AgenticState) -> dict:
     llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0).bind_tools(primary_tools)
     
+    # PROMPT ĐƯỢC SIẾT CHẶT ĐỂ CHỮA BỆNH "LANH CHANH"
     system_prompt = (
-        "You are a helpful and friendly Primary Assistant at FPT Software.\n"
-        "Your job is to greet users, answer simple questions directly, and route complex tasks to your specialized team members using the provided transfer tools.\n"
-        "If the user says 'Hello' or asks 'Who are you?', answer them directly WITHOUT calling tools."
+        "You are the Primary Routing Assistant at FPT Software.\n"
+        "Your ONLY jobs are:\n"
+        "1. Greet the user or answer basic chit-chat directly.\n"
+        "2. If the user wants to do ANY specific task (e.g., book a room, create a ticket, ask about policies, search the web, check status), YOU MUST IMMEDIATELY CALL THE CORRECT TRANSFER TOOL.\n"
+        "CRITICAL WARNING: DO NOT ask the user for details (like their name, room name, issue description, or date) before transferring. Just call the transfer tool immediately and let the specialized agent handle the data collection!"
     )
     
-    # The checkpointer automatically provides the full message history in state["messages"]
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
     response = llm.invoke(messages)
     return {"messages": [response]}
 
 def execute_sub_agent(agent_app, state: AgenticState, agent_name: str, node_name: str) -> dict:
-    """Executes the sub-agent and pushes it to the dialog stack if entered for the first time."""
     print(f"\n   [System] 🔄 Executing {agent_name}...")
     
     last_message = state["messages"][-1]
     tool_messages = []
     
-    # Resolve pending tool calls to satisfy OpenAI API requirements
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         for tool_call in last_message.tool_calls:
             tool_messages.append(
@@ -97,18 +97,34 @@ def execute_sub_agent(agent_app, state: AgenticState, agent_name: str, node_name
                 )
             )
 
-    # Pass history to sub-agent
     initial_sub_state = {
         "messages": list(state["messages"]) + tool_messages,
         "current_iteration": 0,
-        "max_iterations": 3,
+        "max_iterations": 7, # ⬆️ INCREASED: Give the agent more loops for complex update/delete tasks
         "conversation_id": state.get("conversation_id", "default")
     }
+    
     result = agent_app.invoke(initial_sub_state)
     
-    updates = {"messages": tool_messages + [result["messages"][-1]]}
+    final_message = result["messages"][-1]
+    cleanup_messages = []
     
-    # Push this agent to the dialog stack
+    # 🛟 SAFETY NET: Catch dangling tool calls if the agent gets forced to stop
+    # This prevents the OpenAI Error 400 crash on the next turn
+    if hasattr(final_message, "tool_calls") and final_message.tool_calls:
+        print(f"\n   [System] ⚠️ Intercepted dangling tool calls from {agent_name}. Applying safety net.")
+        for tool_call in final_message.tool_calls:
+            cleanup_messages.append(
+                ToolMessage(
+                    content="Agent stopped to ask for user confirmation or reached max iterations.",
+                    name=tool_call["name"],
+                    tool_call_id=tool_call["id"]
+                )
+            )
+
+    # Append the final message AND any safety net cleanups
+    updates = {"messages": tool_messages + [final_message] + cleanup_messages}
+    
     current_dialog = state.get("dialog_state", [])
     if not current_dialog or current_dialog[-1] != node_name:
         updates["dialog_state"] = node_name
@@ -121,20 +137,49 @@ def ticket_node(state: AgenticState) -> dict: return execute_sub_agent(ticket_ag
 def booking_node(state: AgenticState) -> dict: return execute_sub_agent(booking_agent, state, "BOOKING AGENT", "enter_booking")
 
 def leave_skill(state: AgenticState) -> dict:
-    """Pop the dialog state to return control to the Primary Assistant."""
     print("\n   [System] 🔙 Task completed. Returning to Primary Assistant (leave_skill)...")
     return {"dialog_state": "pop"}
 
+# NODE MỚI ĐỂ CHỮA BỆNH MẮC KẸT
+def force_leave_skill(state: AgenticState) -> dict:
+    print("\n   [System] 🔙 Context switch detected! Forcefully leaving current skill...")
+    return {"dialog_state": "pop"}
+
 # ==========================================
-# CONDITIONAL ROUTING LOGIC
+# 4. CONDITIONAL ROUTING LOGIC
 # ==========================================
 
 def route_start(state: AgenticState) -> str:
-    """Route directly to the active agent in the dialog stack if one exists."""
+    """Route directly to the active agent or intercept context switches."""
     if state.get("dialog_state"):
         active_agent = state["dialog_state"][-1]
+        user_msg = state["messages"][-1].content
+        
+        # --- SUPER CONTEXT SWITCH DETECTOR ---
+        # Máy dò đã được nâng cấp: Định nghĩa rõ ràng "lãnh thổ" của từng Agent
+        llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0)
+        switch_prompt = (
+            f"CURRENT AGENT: {active_agent}\n"
+            f"USER MESSAGE: '{user_msg}'\n\n"
+            "SYSTEM DOMAINS:\n"
+            "- enter_booking: Booking meeting rooms, changing room schedules.\n"
+            "- enter_ticket: Creating IT helpdesk tickets, hardware issues, PC problems.\n"
+            "- enter_faq: Company policies, HR rules, overtime.\n"
+            "- enter_it: External web search, tech news.\n\n"
+            "TASK: Does the user's message explicitly request a task that belongs to a DIFFERENT domain than the CURRENT AGENT?\n"
+            "If YES (context switch), reply ONLY with 'YES'.\n"
+            "If NO (stay in current context), reply ONLY with 'NO'."
+        )
+        response = llm.invoke([SystemMessage(content=switch_prompt)]).content.strip().upper()
+        
+        if "YES" in response:
+            print(f"\n   [Router] 🔄 Context switch detected! Interrupting {active_agent}.")
+            return "force_leave_skill"
+        # -------------------------------------
+            
         print(f"\n   [Router] 📍 Resuming conversation with: {active_agent}")
         return active_agent
+        
     print("\n   [Router] 📍 Routing to Primary Assistant")
     return "primary_assistant"
 
@@ -152,16 +197,25 @@ def route_primary_assistant(state: AgenticState) -> str:
 def route_sub_agent(state: AgenticState) -> str:
     """
     Evaluates if the sub-agent should stay active or return to Primary.
-    If it asks a question (?), it stays active to wait for user input (END).
-    Otherwise, the task is considered done, and it triggers leave_skill.
     """
     last_message = state["messages"][-1].content
+    
+    # Mở rộng bộ từ khóa để bao trùm mọi câu thông báo hoàn thành của Agent
+    completion_keywords = [
+        "Successfully created", "Successfully booked", "Successfully updated", 
+        "has been created", "has been canceled", "has been updated", "canceled", "confirmed"
+    ]
+    
+    if any(keyword in last_message for keyword in completion_keywords):
+        return "leave_skill"
+        
     if "?" in last_message:
         return END
+        
     return "leave_skill"
 
 # ==========================================
-# GRAPH COMPILATION WITH CHECKPOINTER
+# 5. GRAPH COMPILATION WITH CHECKPOINTER
 # ==========================================
 
 def create_hierarchical_runner():
@@ -173,6 +227,7 @@ def create_hierarchical_runner():
     builder.add_node("enter_ticket", ticket_node)
     builder.add_node("enter_booking", booking_node)
     builder.add_node("leave_skill", leave_skill)
+    builder.add_node("force_leave_skill", force_leave_skill) # THÊM NODE MỚI
 
     builder.add_conditional_edges(START, route_start)
 
@@ -187,30 +242,25 @@ def create_hierarchical_runner():
         builder.add_conditional_edges(agent, route_sub_agent, ["leave_skill", END])
 
     builder.add_edge("leave_skill", "primary_assistant")
+    builder.add_edge("force_leave_skill", "primary_assistant") # KẾT NỐI NODE MỚI
 
-    # Initialize Memory Checkpointer
     memory = MemorySaver()
-
-    # Compile with checkpointer attached
     return builder.compile(checkpointer=memory)
 
 # ==========================================
-# INTERACTIVE TESTING LOOP
+# 6. INTERACTIVE TESTING LOOP
 # ==========================================
 
 if __name__ == "__main__":
     app = create_hierarchical_runner()
     current_conversation_id = f"SESSION_{uuid.uuid4().hex[:6].upper()}"
     
-    # Configuration object specifying the thread/session ID for the checkpointer
     config = {"configurable": {"thread_id": current_conversation_id}}
     
     print("="*60)
     print("🚀 HIERARCHICAL MASTER CHATBOT INITIALIZED (WITH MEMORY) 🚀")
-    print(f"🔑 Session ID: {current_conversation_id}")
+    print(f"🔑 Conversation ID: {current_conversation_id}")
     print("="*60)
-    
-    # Look, mom! No more manual chat_history array!
     
     while True:
         try:
@@ -220,16 +270,13 @@ if __name__ == "__main__":
             if not user_input:
                 continue
 
-            # Only pass the NEW message. The checkpointer handles the rest based on thread_id.
             input_state = {
                 "messages": [HumanMessage(content=user_input)],
                 "conversation_id": current_conversation_id
             }
             
-            # Invoke the graph using the input state and the thread config
             result = app.invoke(input_state, config=config)
             
-            # The result contains the fully appended message history
             assistant_message = result["messages"][-1]
             print(f"\n🤖 Assistant:\n{assistant_message.content}")
             print("-" * 60)
