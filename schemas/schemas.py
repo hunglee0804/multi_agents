@@ -14,31 +14,21 @@ DIALOG_ROLE = Literal[
     "booking_agent",
 ]
 def update_dialog_stack(left: list[str], right: Optional[str]) -> list[str]:
-    """Push or pop dialog stack"""
-
+    """
+    Manage the dialog stack to track which agent is currently active.
+    Push to stack when entering an agent, 'pop' to leave and return to Primary.
+    """
     if right is None:
         return left
     if right == "pop":
-        return left[:-1] # Pop: return to previous agent
-    
-    return left + [right] # Push: add new agent to stack
+        return left[:-1] if left else []
+    return left + [right]
 
 class AgenticState(TypedDict):
-    """Shared state for all agents"""
-
-    # Messages - automatically merged
-    messages: Annotated[list[AnyMessage], add_messages]
-
-    # Dialog stack - track agent hierarchy
-    dialog_state: Annotated[
-        list[DIALOG_ROLE],
-        update_dialog_stack,
-    ]
-
-    # Context information
-    conversation_id: Annotated[str, ["Conversation ID"]]
-    user_id: Annotated[str, "User ID"]
-    email: Annotated[Optional[EmailStr], " Email from context (optional)"]
+    """Shared master state for the hierarchical multi-agent system."""
+    messages: Annotated[List[AnyMessage], add_messages]
+    dialog_state: Annotated[List[str], update_dialog_stack]
+    session_id: str
 
     
 def pop_dialog_state(state: AgenticState):
