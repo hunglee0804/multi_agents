@@ -13,8 +13,10 @@ from multi_agents.schemas.schemas import UpdateContextSchema
 @tool("update_context_tool", args_schema=UpdateContextSchema)
 def update_context_tool(conversation_id: str, user_id: str = None, email: str = None) -> str:
     """
-    IMPORTANT: Call this tool to SAVE or UPDATE user identity (user_id, email) in the database.
-    Use this IMMEDIATELY when the user provides their ID or Email.
+    CRITICAL: Call this tool IMMEDIATELY to save the user's identity into the database.
+    - 'user_id' can be their Employee ID OR their Name (e.g., 'Lee').
+    - 'email' is their email address.
+    You MUST call this as soon as the user provides their Name or Email!
     """
     save_conversation_context(conversation_id, user_id, email)
     return "User identity successfully updated in the database."

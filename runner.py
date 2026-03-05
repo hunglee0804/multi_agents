@@ -68,7 +68,6 @@ primary_tools = [
 def primary_assistant_node(state: AgenticState) -> dict:
     llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0).bind_tools(primary_tools)
     
-    # PROMPT ĐƯỢC SIẾT CHẶT ĐỂ CHỮA BỆNH "LANH CHANH"
     system_prompt = (
         "You are the Primary Routing Assistant at FPT Software.\n"
         "Your ONLY jobs are:\n"

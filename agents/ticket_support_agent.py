@@ -47,15 +47,19 @@ def reasoner_node(state: TicketState) -> dict:
     context_data = get_conversation_context(conversation_id)
     
     # Build the context injection string
-    context_msg = f"\n\n--- DATABASE CONTEXT (Session: {conversation_id}) ---\n"
+    context_msg = f"\n\n--- DATABASE CONTEXT (Conversation: {conversation_id}) ---\n"
     if context_data:
-        context_msg += f"Known User ID: {context_data.get('user_id', 'Unknown')}\n"
+        context_msg += f"Known User ID / Name: {context_data.get('user_id', 'Unknown')}\n"
         context_msg += f"Known Email: {context_data.get('email', 'Unknown')}\n"
-        context_msg += f"Saved Params: {context_data.get('extracted_parameters', {})}\n"
     else:
-        context_msg += "No prior data saved yet.\n"
+        context_msg += "No user identity saved yet.\n"
     
-    context_msg += "\nINSTRUCTION: If you learn new details (like user_id, email, or issue category), use 'update_context_tool' to save them. Use the known data above to avoid asking the user again for information they already provided!"
+    context_msg += (
+        "\nCRITICAL INSTRUCTION: If the user provides their Name or Email, "
+        "you MUST call 'update_context_tool' IMMEDIATELY before answering! "
+        f"Use '{conversation_id}' as the conversation_id. "
+        "If their name is known, do not ask for it again."
+    )
 
     # Override/Inject the SystemMessage
     full_prompt = TICKET_AGENT_PROMPT + context_msg

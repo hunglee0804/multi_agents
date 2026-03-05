@@ -37,17 +37,20 @@ def save_conversation_context(conversation_id: str, user_id: str = None, email: 
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Upsert: Insert new, or update existing and change 'updated_at'
+        
         cursor.execute('''
             INSERT INTO conversation_context (conversation_id, user_id, email, created_at, updated_at)
             VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(conversation_id) DO UPDATE SET
-                user_id = excluded.user_id,
-                email = excluded.email,
+                user_id = COALESCE(excluded.user_id, conversation_context.user_id),
+                email = COALESCE(excluded.email, conversation_context.email),
                 updated_at = CURRENT_TIMESTAMP
         ''', (conversation_id, user_id, email))
         
         conn.commit()
         conn.close()
+        
+       
+        # print(f"\n   [Database] ✅ Context Saved! (Session: {conversation_id} | User: {user_id} | Email: {email})")
     except Exception as e:
-        print(f"⚠️ Error saving context: {e}")
+        print(f"\n   [Database] ⚠️ Error saving context: {e}")
