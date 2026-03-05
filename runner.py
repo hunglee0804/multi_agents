@@ -66,18 +66,26 @@ primary_tools = [
 # ==========================================
 
 def primary_assistant_node(state: AgenticState) -> dict:
+    # Không giới hạn max_tokens để Primary có thể trả lời đầy đủ, nhưng temperature = 0 để giữ sự nghiêm túc
     llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0).bind_tools(primary_tools)
     
     system_prompt = (
-        "You are the Primary Routing Assistant at FPT Software.\n"
-        "Your ONLY jobs are:\n"
-        "1. Greet the user or answer basic chit-chat directly.\n"
-        "2. If the user wants to do ANY specific task (e.g., book a room, create a ticket, ask about policies, search the web, check status), YOU MUST IMMEDIATELY CALL THE CORRECT TRANSFER TOOL.\n"
-        "CRITICAL WARNING: DO NOT ask the user for details (like their name, room name, issue description, or date) before transferring. Just call the transfer tool immediately and let the specialized agent handle the data collection!"
+        "You are the Primary Routing Assistant at FPT Software. "
+        "Your capabilities are STRICTLY limited to exactly 4 domains:\n"
+        "1. Booking meeting rooms or checking room status (transfer_to_booking_agent).\n"
+        "2. Creating IT support tickets or checking ticket status (transfer_to_ticket_agent).\n"
+        "3. Answering internal company policies, HR rules, or guidelines (transfer_to_faq_agent).\n"
+        "4. Searching the EXTERNAL web for public tech news or benchmarks (transfer_to_it_agent).\n\n"
+        
+        "CRITICAL RULES:\n"
+        "- OUT-OF-SCOPE & CHIT-CHAT: If the user says hello, or asks to do something OUTSIDE your 4 domains (e.g., ordering food, booking flights, personal advice), answer DIRECTLY. Politely decline and state what you can actually do. DO NOT call any transfer tools.\n"
+        "- IN-SCOPE TASKS: If the request matches a domain, IMMEDIATELY call the correct transfer tool. DO NOT ask the user for specific details (like name, time, room, issue description) yourself. The specialized agent will do that.\n"
+        "- MULTIPLE TASKS AT ONCE: If the user asks for multiple things in one sentence (e.g., 'book a room and log a ticket'), DO NOT call multiple tools at once. Call the transfer tool for the FIRST task ONLY, and politely tell the user you will handle the first task now and the second task later."
     )
     
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
     response = llm.invoke(messages)
+    
     return {"messages": [response]}
 
 def execute_sub_agent(agent_app, state: AgenticState, agent_name: str, node_name: str) -> dict:
