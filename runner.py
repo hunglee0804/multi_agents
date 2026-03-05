@@ -18,7 +18,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from multi_agents.config.config import *
 from multi_agents.config.variable import CHATBOT_MODEL
-from multi_agents.schemas.schemas import AgenticState
+from multi_agents.schemas.schemas import AgenticState, CompleteOrEscalate
 
 from multi_agents.agents.faq_agent import create_retrieval_agent
 from multi_agents.agents.it_support_agent import create_it_support_agent
@@ -67,7 +67,7 @@ primary_tools = [
 
 def primary_assistant_node(state: AgenticState) -> dict:
     # Không giới hạn max_tokens để Primary có thể trả lời đầy đủ, nhưng temperature = 0 để giữ sự nghiêm túc
-    llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0).bind_tools(primary_tools)
+    llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0).bind_tools(primary_tools + [CompleteOrEscalate ])
     
     system_prompt = (
         "You are the Primary Routing Assistant at FPT Software. "
@@ -81,6 +81,10 @@ def primary_assistant_node(state: AgenticState) -> dict:
         "- OUT-OF-SCOPE & CHIT-CHAT: If the user says hello, or asks to do something OUTSIDE your 4 domains (e.g., ordering food, booking flights, personal advice), answer DIRECTLY. Politely decline and state what you can actually do. DO NOT call any transfer tools.\n"
         "- IN-SCOPE TASKS: If the request matches a domain, IMMEDIATELY call the correct transfer tool. DO NOT ask the user for specific details (like name, time, room, issue description) yourself. The specialized agent will do that.\n"
         "- MULTIPLE TASKS AT ONCE: If the user asks for multiple things in one sentence (e.g., 'book a room and log a ticket'), DO NOT call multiple tools at once. Call the transfer tool for the FIRST task ONLY, and politely tell the user you will handle the first task now and the second task later."
+        "- RETURNING FROM AGENT: If the conversation already contains a completed answer from a specialized agent, "
+        "DO NOT re-route. Present the result naturally and wait for the user's next request.\n"
+        "- CHIT-CHAT AFTER TASK: If the user sends a greeting or off-topic message after a task is completed, "
+        "answer it DIRECTLY yourself. Never call a transfer tool for greetings or casual messages."
     )
     
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
@@ -107,7 +111,7 @@ def execute_sub_agent(agent_app, state: AgenticState, agent_name: str, node_name
     initial_sub_state = {
         "messages": list(state["messages"]) + tool_messages,
         "current_iteration": 0,
-        "max_iterations": 7, # ⬆️ INCREASED: Give the agent more loops for complex update/delete tasks
+        "max_iterations": 7,
         "conversation_id": state.get("conversation_id", "default")
     }
     
@@ -116,25 +120,31 @@ def execute_sub_agent(agent_app, state: AgenticState, agent_name: str, node_name
     final_message = result["messages"][-1]
     cleanup_messages = []
     
-    # 🛟 SAFETY NET: Catch dangling tool calls if the agent gets forced to stop
-    # This prevents the OpenAI Error 400 crash on the next turn
+    # 🛟 SAFETY NET: Only intercept NON-CompleteOrEscalate dangling tool calls
     if hasattr(final_message, "tool_calls") and final_message.tool_calls:
-        print(f"\n   [System] ⚠️ Intercepted dangling tool calls from {agent_name}. Applying safety net.")
-        for tool_call in final_message.tool_calls:
-            cleanup_messages.append(
-                ToolMessage(
-                    content="Agent stopped to ask for user confirmation or reached max iterations.",
-                    name=tool_call["name"],
-                    tool_call_id=tool_call["id"]
+        non_escalate_calls = [
+            tc for tc in final_message.tool_calls 
+            if tc["name"] != "CompleteOrEscalate"  # <-- KEY FIX
+        ]
+        if non_escalate_calls:
+            print(f"\n   [System] ⚠️ Intercepted dangling tool calls from {agent_name}. Applying safety net.")
+            for tool_call in non_escalate_calls:
+                cleanup_messages.append(
+                    ToolMessage(
+                        content="Agent stopped to ask for user confirmation or reached max iterations.",
+                        name=tool_call["name"],
+                        tool_call_id=tool_call["id"]
+                    )
                 )
-            )
 
-    # Append the final message AND any safety net cleanups
     updates = {"messages": tool_messages + [final_message] + cleanup_messages}
     
     current_dialog = state.get("dialog_state", [])
     if not current_dialog or current_dialog[-1] != node_name:
         updates["dialog_state"] = node_name
+
+    if not (hasattr(final_message, "tool_calls") and final_message.tool_calls):
+        updates["dialog_state"] = "pop"
         
     return updates
 
@@ -144,8 +154,24 @@ def ticket_node(state: AgenticState) -> dict: return execute_sub_agent(ticket_ag
 def booking_node(state: AgenticState) -> dict: return execute_sub_agent(booking_agent, state, "BOOKING AGENT", "enter_booking")
 
 def leave_skill(state: AgenticState) -> dict:
+    """Pop the dialog state and securely resolve dangling CompleteOrEscalate tool calls."""
     print("\n   [System] 🔙 Task completed. Returning to Primary Assistant (leave_skill)...")
-    return {"dialog_state": "pop"}
+    messages = []
+    last_message = state["messages"][-1]
+    
+    
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        for tool_call in last_message.tool_calls:
+            if tool_call["name"] == "CompleteOrEscalate":
+                messages.append(
+                    ToolMessage(
+                        content= "Resuming dialog with the host assistant. Please reflect on the past conversation and assist the user as needed.",
+                        name=tool_call["name"],
+                        tool_call_id=tool_call["id"]
+                    )
+                )
+                
+    return {"dialog_state": "pop", "messages": messages}
 
 # def force_leave_skill(state: AgenticState) -> dict:
 #     print("\n   [System] 🔙 Context switch detected! Forcefully leaving current skill...")
@@ -156,33 +182,9 @@ def leave_skill(state: AgenticState) -> dict:
 # ==========================================
 
 def route_start(state: AgenticState) -> str:
-    """Route directly to the active agent or intercept context switches."""
+    """Route directly to the active agent. No LLM detector needed here anymore!"""
     if state.get("dialog_state"):
         active_agent = state["dialog_state"][-1]
-        user_msg = state["messages"][-1].content
-        
-        # --- SUPER CONTEXT SWITCH DETECTOR ---
-        # Máy dò đã được nâng cấp: Định nghĩa rõ ràng "lãnh thổ" của từng Agent
-        llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0)
-        switch_prompt = (
-            f"CURRENT AGENT: {active_agent}\n"
-            f"USER MESSAGE: '{user_msg}'\n\n"
-            "SYSTEM DOMAINS:\n"
-            "- enter_booking: Booking meeting rooms, changing room schedules.\n"
-            "- enter_ticket: Creating IT helpdesk tickets, hardware issues, PC problems.\n"
-            "- enter_faq: Company policies, HR rules, overtime.\n"
-            "- enter_it: External web search, tech news.\n\n"
-            "TASK: Does the user's message explicitly request a task that belongs to a DIFFERENT domain than the CURRENT AGENT?\n"
-            "If YES (context switch), reply ONLY with 'YES'.\n"
-            "If NO (stay in current context), reply ONLY with 'NO'."
-        )
-        response = llm.invoke([SystemMessage(content=switch_prompt)]).content.strip().upper()
-        
-        if "YES" in response:
-            print(f"\n   [Router] 🔄 Context switch detected! Interrupting {active_agent}.")
-            return "force_leave_skill"
-        # -------------------------------------
-            
         print(f"\n   [Router] 📍 Resuming conversation with: {active_agent}")
         return active_agent
         
@@ -202,23 +204,19 @@ def route_primary_assistant(state: AgenticState) -> str:
 
 def route_sub_agent(state: AgenticState) -> str:
     """
-    Evaluates if the sub-agent should stay active or return to Primary.
+    Evaluates if ANY sub-agent called the CompleteOrEscalate tool to return to Primary.
+    Works universally for FAQ, IT, Ticket, and Booking agents!
     """
-    last_message = state["messages"][-1].content
+    last_message = state["messages"][-1]
+    active_agent = state.get("dialog_state", [])[-1] if state.get("dialog_state") else "Unknown Agent"
     
-    # Mở rộng bộ từ khóa để bao trùm mọi câu thông báo hoàn thành của Agent
-    completion_keywords = [
-        "Successfully created", "Successfully booked", "Successfully updated", 
-        "has been created", "has been canceled", "has been updated", "canceled", "confirmed"
-    ]
-    
-    if any(keyword in last_message for keyword in completion_keywords):
-        return "leave_skill"
-        
-    if "?" in last_message:
-        return END
-        
-    return "leave_skill"
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        if last_message.tool_calls[0]["name"] == "CompleteOrEscalate":
+            print(f"\n   [Router] ✅ {active_agent} triggered CompleteOrEscalate. Popping state.")
+            return "leave_skill"
+            
+    print(f"\n   [Router] ⏳ {active_agent} needs more info. Waiting for user input.")
+    return END
 
 # ==========================================
 # 5. GRAPH COMPILATION WITH CHECKPOINTER

@@ -59,12 +59,6 @@ def reasoner_node(state: TicketState) -> dict:
         "you MUST call 'update_context_tool' IMMEDIATELY before answering! "
         f"Use '{conversation_id}' as the conversation_id. "
         "If their name is known, do not ask for it again."
-        
-        "\nCRITICAL INSTRUCTION 2: When you have successfully completed the user's request "
-        "(e.g., ticket is created/updated/canceled), OR if you cannot proceed and need to escalate, "
-        "you MUST call the 'CompleteOrEscalate' tool. "
-        "This signals the system to return control to the Primary Assistant. "
-        "You can include a friendly final message to the user in the same response!"
     )
 
     # Override/Inject the SystemMessage

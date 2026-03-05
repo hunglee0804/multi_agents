@@ -33,6 +33,11 @@ REACT_PROMPT = """
 
     You have access to the following tool:
     - retrieve_documents_tool
+
+    # Critical Rule
+    Once you have gathered enough information and written your final answer to the user,
+    you MUST call CompleteOrEscalate to return control to the Primary Assistant.
+    Never end without calling CompleteOrEscalate.
 """
 
 HYDE_PROMPT = """
@@ -85,13 +90,15 @@ Execution Rules:
 2. Write tool queries as short, specific questions (1 sentence max).
 3. After receiving tool responses, synthesize and stop. Only call additional tools if a critical factual gap remains.
 4. Max {max_iterations} iterations. Current: {iteration}/{max_iterations}. Stop before the limit if you have enough.
+5. When your answer is complete, you MUST call CompleteOrEscalate to signal task completion.
 
 Output format:
 - Start with the answer directly — no preamble.
 - Use bullet points or short paragraphs.
 - Target 150–300 words. Do not pad.
 - Never mention tools, agents, or your internal process.
-- RETURN the website's link of all search"""
+- RETURN the website's link of all search
+- After writing your answer, call CompleteOrEscalate."""
 
 # ==========================================
 # TICKET SUPPORT AGENT PROMPTS

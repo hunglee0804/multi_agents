@@ -1,3 +1,5 @@
+from langchain_core import messages
+
 from multi_agents.tools.react_tool import retrieve_documents_tool
 from multi_agents.schemas.schemas import FAQState, CompleteOrEscalate
 from multi_agents.config.prompt import REACT_PROMPT
@@ -22,9 +24,18 @@ def reasoner_node(state: FAQState) -> dict:
     """
     messages = state["messages"]
     
+    instruction = (
+        "\n\nCRITICAL INSTRUCTION: When you have successfully answered the user's question, "
+        "OR if you cannot proceed and need to escalate, you MUST call the 'CompleteOrEscalate' tool. "
+        "This signals the system to return control to the Primary Assistant. "
+        "You can include a friendly final message to the user in the same response!"
+    )
+    full_prompt = REACT_PROMPT + instruction
     # Check SystemMessage. If it is not in, add it
-    if not any(isinstance(m, SystemMessage) for m in messages):
-        messages = [SystemMessage(content=REACT_PROMPT)] + messages
+    if messages and isinstance(messages[0], SystemMessage):
+        messages[0] = SystemMessage(content=full_prompt)
+    else:
+        messages.insert(0, SystemMessage(content=full_prompt))
 
     response = llm_with_tools.invoke(messages)
     
@@ -47,6 +58,8 @@ def should_continue(state: FAQState) -> str:
 
     # check to decide call tool
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        if last_message.tool_calls[0]["name"] == "CompleteOrEscalate":
+            return "end"
         return "use_tools"
 
     return "end"

@@ -5,7 +5,7 @@ from langgraph.prebuilt import ToolNode
 
 from multi_agents.config.variable import CHATBOT_MODEL, MAX_ITERATIONS
 from multi_agents.config.prompt import PLANNER_PROMPT, COORDINATOR_PROMPT
-from multi_agents.schemas.schemas import ResearcherState
+from multi_agents.schemas.schemas import ResearcherState, CompleteOrEscalate
 from multi_agents.tools.tavily_tool import TAVILY_ALL_TOOLS
 
 # Initialize LLM for Nodes (Planner & Coordinator)
@@ -24,7 +24,7 @@ def planner_node(state: ResearcherState) -> dict:
 
 
 # Bind tools into LLM for Coordinator
-coordinator_with_tools = llm.bind_tools(TAVILY_ALL_TOOLS)
+coordinator_with_tools = llm.bind_tools(TAVILY_ALL_TOOLS + [CompleteOrEscalate])
 
 def coordinator_node(state: ResearcherState) -> dict:
     """
@@ -59,6 +59,8 @@ def should_continue(state: ResearcherState) -> str:
 
     # If LLM calls a tool, we need to continue to execute that tool
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        if last_message.tool_calls[0]["name"] == "CompleteOrEscalate":
+            return "end"
         return "use_tools"
 
     # If no tool calls and we've reached max iterations, end the workflow

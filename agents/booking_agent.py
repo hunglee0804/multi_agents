@@ -39,6 +39,7 @@ def reasoner_node(state: BookingState) -> dict:
     
     # Take the memory from Database
     context_data = get_conversation_context(conversation_id)
+    context_msg = f"\n\n--- DATABASE CONTEXT (Conversation: {conversation_id}) ---\n"  # ADD THIS LINE
     if context_data:
         context_msg += f"Known User ID / Name: {context_data.get('user_id', 'Unknown')}\n"
         context_msg += f"Known Email: {context_data.get('email', 'Unknown')}\n"
@@ -52,7 +53,7 @@ def reasoner_node(state: BookingState) -> dict:
         "If their name is known, do not ask for it again.\n"
         
         "\nCRITICAL INSTRUCTION 2: When you have successfully completed the user's request "
-        "(e.g., booking is confirmed/canceled), OR if you cannot proceed and need to escalate, "
+        "(e.g., ticket is created/updated/canceled), OR if you cannot proceed and need to escalate, "
         "you MUST call the 'CompleteOrEscalate' tool. "
         "This signals the system to return control to the Primary Assistant. "
         "You can include a friendly final message to the user in the same response!"
