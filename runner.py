@@ -147,10 +147,9 @@ def leave_skill(state: AgenticState) -> dict:
     print("\n   [System] 🔙 Task completed. Returning to Primary Assistant (leave_skill)...")
     return {"dialog_state": "pop"}
 
-# NODE MỚI ĐỂ CHỮA BỆNH MẮC KẸT
-def force_leave_skill(state: AgenticState) -> dict:
-    print("\n   [System] 🔙 Context switch detected! Forcefully leaving current skill...")
-    return {"dialog_state": "pop"}
+# def force_leave_skill(state: AgenticState) -> dict:
+#     print("\n   [System] 🔙 Context switch detected! Forcefully leaving current skill...")
+#     return {"dialog_state": "pop"}
 
 # ==========================================
 # 4. CONDITIONAL ROUTING LOGIC
@@ -234,7 +233,7 @@ def create_hierarchical_runner():
     builder.add_node("enter_ticket", ticket_node)
     builder.add_node("enter_booking", booking_node)
     builder.add_node("leave_skill", leave_skill)
-    builder.add_node("force_leave_skill", force_leave_skill) # THÊM NODE MỚI
+    # builder.add_node("force_leave_skill", force_leave_skill) 
 
     builder.add_conditional_edges(START, route_start)
 
@@ -249,7 +248,7 @@ def create_hierarchical_runner():
         builder.add_conditional_edges(agent, route_sub_agent, ["leave_skill", END])
 
     builder.add_edge("leave_skill", "primary_assistant")
-    builder.add_edge("force_leave_skill", "primary_assistant") # KẾT NỐI NODE MỚI
+    # builder.add_edge("force_leave_skill", "primary_assistant")
 
     memory = MemorySaver()
     return builder.compile(checkpointer=memory)

@@ -17,7 +17,7 @@ from langgraph.prebuilt import ToolNode
 # Import project configurations and modules
 from multi_agents.config.variable import CHATBOT_MODEL, MAX_ITERATIONS
 from multi_agents.config.prompt import TICKET_AGENT_PROMPT
-from multi_agents.schemas.schemas import TicketState
+from multi_agents.schemas.schemas import TicketState, CompleteOrEscalate
 from multi_agents.tools.ticket_tool import TICKET_ALL_TOOLS
 
 # NEW IMPORTS FOR CONTEXT
@@ -29,7 +29,7 @@ ALL_TOOLS = TICKET_ALL_TOOLS + [update_context_tool]
 
 # Initialize the LLM and bind the combined tools
 llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0)
-llm_with_tools = llm.bind_tools(ALL_TOOLS)
+llm_with_tools = llm.bind_tools(ALL_TOOLS + [CompleteOrEscalate])
 
 # ==========================================
 # NODE DEFINITIONS
@@ -59,6 +59,12 @@ def reasoner_node(state: TicketState) -> dict:
         "you MUST call 'update_context_tool' IMMEDIATELY before answering! "
         f"Use '{conversation_id}' as the conversation_id. "
         "If their name is known, do not ask for it again."
+        
+        "\nCRITICAL INSTRUCTION 2: When you have successfully completed the user's request "
+        "(e.g., ticket is created/updated/canceled), OR if you cannot proceed and need to escalate, "
+        "you MUST call the 'CompleteOrEscalate' tool. "
+        "This signals the system to return control to the Primary Assistant. "
+        "You can include a friendly final message to the user in the same response!"
     )
 
     # Override/Inject the SystemMessage
@@ -84,11 +90,13 @@ def should_continue(state: TicketState) -> str:
     
     # Hard stop to prevent infinite loops
     if state.get("current_iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
-        print("\n   [TICKET SYSTEM] ⚠️ Max iterations reached. Forcing the agent to stop.")
+        # print("\n   [TICKET SYSTEM] ⚠️ Max iterations reached. Forcing the agent to stop.")
         return "end"
 
     # If the LLM decided to call a tool, route to the 'tools' node
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        if last_message.tool_calls[0]["name"] == "CompleteOrEscalate":
+            return "end"
         return "use_tools"
 
     return "end"

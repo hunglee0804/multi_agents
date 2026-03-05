@@ -17,7 +17,7 @@ from langgraph.prebuilt import ToolNode
 # Import project configurations and modules
 from multi_agents.config.variable import CHATBOT_MODEL, MAX_ITERATIONS
 from multi_agents.config.prompt import BOOKING_AGENT_PROMPT
-from multi_agents.schemas.schemas import BookingState
+from multi_agents.schemas.schemas import BookingState, CompleteOrEscalate
 from multi_agents.tools.booking_tool import BOOKING_ALL_TOOLS
 from multi_agents.tools.context_tool import update_context_tool
 from multi_agents.context_injection.context_manager import get_conversation_context
@@ -27,7 +27,7 @@ ALL_TOOLS = BOOKING_ALL_TOOLS + [update_context_tool]
 
 # Initialize the LLM and bind the booking tools
 llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0)
-llm_with_tools = llm.bind_tools(BOOKING_ALL_TOOLS)
+llm_with_tools = llm.bind_tools(ALL_TOOLS + [CompleteOrEscalate])
 
 # ==========================================
 # NODE DEFINITIONS
@@ -39,9 +39,6 @@ def reasoner_node(state: BookingState) -> dict:
     
     # Take the memory from Database
     context_data = get_conversation_context(conversation_id)
-    
-    # Create notice sequence for LLM
-    context_msg = f"\n\n--- DATABASE CONTEXT (Conversation: {conversation_id}) ---\n"
     if context_data:
         context_msg += f"Known User ID / Name: {context_data.get('user_id', 'Unknown')}\n"
         context_msg += f"Known Email: {context_data.get('email', 'Unknown')}\n"
@@ -49,10 +46,16 @@ def reasoner_node(state: BookingState) -> dict:
         context_msg += "No user identity saved yet.\n"
     
     context_msg += (
-        "\nCRITICAL INSTRUCTION: If the user provides their Name or Email, "
+        "\nCRITICAL INSTRUCTION 1: If the user provides their Name or Email, "
         "you MUST call 'update_context_tool' IMMEDIATELY before answering! "
         f"Use '{conversation_id}' as the conversation_id. "
-        "If their name is known, do not ask for it again."
+        "If their name is known, do not ask for it again.\n"
+        
+        "\nCRITICAL INSTRUCTION 2: When you have successfully completed the user's request "
+        "(e.g., booking is confirmed/canceled), OR if you cannot proceed and need to escalate, "
+        "you MUST call the 'CompleteOrEscalate' tool. "
+        "This signals the system to return control to the Primary Assistant. "
+        "You can include a friendly final message to the user in the same response!"
     )
 
     # Override SystemMessage to always update the latest memory
@@ -77,11 +80,13 @@ def should_continue(state: BookingState) -> str:
     
     # Hard stop to prevent infinite loops
     if state.get("current_iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
-        print("\n   [BOOKING SYSTEM] ⚠️ Max iterations reached. Forcing the agent to stop.")
+        # print("\n   [BOOKING SYSTEM] ⚠️ Max iterations reached. Forcing the agent to stop.")
         return "end"
 
     # If the LLM decided to call a tool, route to the 'tools' node
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        if last_message.tool_calls[0]["name"] == "CompleteOrEscalate":
+            return "end"
         return "use_tools"
 
     # Otherwise, the LLM has generated a final response

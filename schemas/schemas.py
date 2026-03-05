@@ -163,3 +163,40 @@ class UpdateBookingStatusSchema(BaseModel):
     """Schema for updating the status of an existing booking."""
     booking_id: str = Field(..., description="The unique booking identifier (e.g., 'BKG-XXXXXX').")
     new_status: str = Field(..., description="The new status. MUST be exactly one of: 'Scheduled', 'Canceled', 'Finished'.")
+
+# Add CompleteOrEscalate Schema
+class CompleteOrEscalate(BaseModel):
+    """A tool to mark the current task as completed and/or to escalate control of the dialog to the main assistant,
+    who can re-route the dialog based on the user's needs."""
+    cancel: bool = Field(True, description="Whether the task is canceled or completed.")
+    reason: str = Field(..., description="The reason for completion or escalation.")
+    
+    class Config:
+
+        json_schema_extra = {
+
+            "example": {
+
+                "cancel": True,
+
+                "reason": "Task completed successfully. Returning to primary assistant."
+
+            },
+
+            "example 2": {
+
+                "cancel": True,
+
+                "reason": "User changed their mind. Need to return to primary assistant."
+
+            },
+
+            "example 3": {
+
+                "cancel": False,
+
+                "reason": "Need more information from user to complete the task."
+
+            }
+
+        }

@@ -1,5 +1,5 @@
 from multi_agents.tools.react_tool import retrieve_documents_tool
-from multi_agents.schemas.schemas import FAQState
+from multi_agents.schemas.schemas import FAQState, CompleteOrEscalate
 from multi_agents.config.prompt import REACT_PROMPT
 from multi_agents.config.variable import CHATBOT_MODEL, MAX_ITERATIONS
 from langchain_core.messages import SystemMessage
@@ -12,7 +12,7 @@ from langgraph.prebuilt import ToolNode
 # Initialize model and bind tôl
 llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0)
 faq_tools = [retrieve_documents_tool]
-llm_with_tools = llm.bind_tools(faq_tools)
+llm_with_tools = llm.bind_tools(faq_tools + [CompleteOrEscalate])
 
 
 # Define node for ReAct graph
