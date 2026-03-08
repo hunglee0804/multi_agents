@@ -13,6 +13,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
+from langgraph.checkpoint.memory import MemorySaver
 
 # Import project configurations and modules
 from multi_agents.config.variable import CHATBOT_MODEL, MAX_ITERATIONS
@@ -23,6 +24,8 @@ from multi_agents.tools.context_tool import update_context_tool
 from multi_agents.context_injection.context_manager import get_conversation_context
 
 # Combine booking tools with the new context tool
+safe_tools = [BOOKING_ALL_TOOLS[1], update_context_tool, CompleteOrEscalate] # check_booking
+sensitive_tools = [BOOKING_ALL_TOOLS[0], BOOKING_ALL_TOOLS[2]] # create, update
 ALL_TOOLS = BOOKING_ALL_TOOLS + [update_context_tool]+ [CompleteOrEscalate]
 
 # Initialize the LLM and bind the booking tools
@@ -52,10 +55,11 @@ def reasoner_node(state: BookingState) -> dict:
         f"Use '{conversation_id}' as the conversation_id. "
         "If their name is known, do not ask for it again.\n"
         
-        "\nCRITICAL INSTRUCTION 2: If you need to ask the user for missing information, "
-        "DO NOT call any tools. Just reply with a normal conversational text message. "
-        "ONLY call the 'CompleteOrEscalate' tool AFTER you have successfully executed a database tool (like creating/updating a ticket) "
-        "OR if the user explicitly wants to cancel the request. Once finished, put your final success message in the 'reason' parameter of CompleteOrEscalate."
+        "\nCRITICAL INSTRUCTION 2: STRICT TOOL CALLING RULES:\n"
+        "- If you need to ask for missing info, confirm details, or say 'I will proceed', just reply with NORMAL TEXT. DO NOT call any tools.\n"
+        "- To perform the actual action, you MUST call the specific database tool (e.g., create_booking_tool or create_ticket_tool).\n"
+        "- NEVER call 'CompleteOrEscalate' to say you are 'proceeding' or 'attempting' to do something.\n"
+        "- ONLY call 'CompleteOrEscalate' AFTER you have actually called the database tool, received the successful DB response, and want to end the task. Put your final summary in the 'reason' parameter."
     )
 
     # Override SystemMessage to always update the latest memory
@@ -73,23 +77,18 @@ def reasoner_node(state: BookingState) -> dict:
     }
 
 def should_continue(state: BookingState) -> str:
-    """
-    Routing logic to determine the next step in the LangGraph workflow.
-    """
     last_message = state["messages"][-1]
     
-    # Hard stop to prevent infinite loops
     if state.get("current_iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
-        # print("\n   [BOOKING SYSTEM] ⚠️ Max iterations reached. Forcing the agent to stop.")
         return "end"
 
-    # If the LLM decided to call a tool, route to the 'tools' node
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        if last_message.tool_calls[0]["name"] == "CompleteOrEscalate":
+        tool_name = last_message.tool_calls[0]["name"]
+        if tool_name == "CompleteOrEscalate":
             return "end"
-        return "use_tools"
-
-    # Otherwise, the LLM has generated a final response
+        if tool_name in [t.name for t in sensitive_tools]:
+            return "sensitive_tools"
+        return "safe_tools"
     return "end"
 
 # ==========================================
@@ -103,27 +102,22 @@ def create_booking_agent():
     """
     workflow = StateGraph(BookingState)
     
-    # Add nodes
     workflow.add_node("reasoner", reasoner_node)
-    workflow.add_node("tools", ToolNode(ALL_TOOLS))
+    workflow.add_node("safe_tools", ToolNode(safe_tools))
+    workflow.add_node("sensitive_tools", ToolNode(sensitive_tools))
 
-    # Set entry point
     workflow.set_entry_point("reasoner")
+    workflow.add_conditional_edges("reasoner", should_continue, {
+        "safe_tools": "safe_tools",
+        "sensitive_tools": "sensitive_tools",
+        "end": END
+    })
+    workflow.add_edge("safe_tools", "reasoner")
+    workflow.add_edge("sensitive_tools", "reasoner")
 
-    # Add conditional edges from the reasoner
-    workflow.add_conditional_edges(
-        "reasoner",
-        should_continue,
-        {
-            "use_tools": "tools",
-            "end": END
-        }
-    )
-
-    # Return to reasoner after tool execution
-    workflow.add_edge("tools", "reasoner")
-
-    # Compile the graph
-    app = workflow.compile()
+    ENABLE_HITL = True
+    interrupts = ["sensitive_tools"] if ENABLE_HITL else []
+    memory = MemorySaver()
+    app = workflow.compile(checkpointer=memory, interrupt_before=interrupts)
     
     return app

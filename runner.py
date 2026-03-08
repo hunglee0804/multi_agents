@@ -95,10 +95,20 @@ def primary_assistant_node(state: AgenticState) -> dict:
 def execute_sub_agent(agent_app, state: AgenticState, agent_name: str, node_name: str) -> dict:
     print(f"\n   [System] 🔄 Executing {agent_name}...")
     
+    conversation_id = state.get("conversation_id", "default")
+    
+    # Create a separate Thread ID for the sub-agent to prevent memory conflicts with the Primary Assistant
+    sub_config = {"configurable": {"thread_id": f"{conversation_id}_{node_name}"}}
+    
+    # 1. CHECK IF THE SUB-AGENT IS WAITING FOR USER CONFIRMATION (INTERRUPTED)
+    agent_state = agent_app.get_state(sub_config)
+    is_interrupted = agent_state and len(agent_state.next) > 0
+    
     last_message = state["messages"][-1]
     tool_messages = []
     
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+    # Acknowledge the transfer tool call if we are just entering the sub-agent
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls and not is_interrupted:
         for tool_call in last_message.tool_calls:
             tool_messages.append(
                 ToolMessage(
@@ -108,43 +118,79 @@ def execute_sub_agent(agent_app, state: AgenticState, agent_name: str, node_name
                 )
             )
 
-    initial_sub_state = {
-        "messages": list(state["messages"]) + tool_messages,
-        "current_iteration": 0,
-        "max_iterations": 3,
-        "conversation_id": state.get("conversation_id", "default")
-    }
+    if is_interrupted:
+        # The user just provided their confirmation answer ("yes" or "no")
+        user_input = last_message.content.strip().lower()
+        pending_tool_calls = agent_state.values["messages"][-1].tool_calls
+        
+        if user_input in ['yes', 'y', 'confirm', 'ok']:
+            print(f"\n   [HITL] ✅ User approved execution.")
+            # Resume execution of the interrupted tool
+            result = agent_app.invoke(None, sub_config)
+        else:
+            print(f"\n   [HITL] ❌ User rejected execution.")
+            
+            # Cancel the tool execution by simulating a failed tool response
+            cancel_messages = []
+            for tc in pending_tool_calls:
+                cancel_messages.append(ToolMessage(
+                    content="Execution canceled. The user denied permission.",
+                    name=tc["name"],
+                    tool_call_id=tc["id"]
+                ))
+            
+            # Force update the state with the cancellation messages and let the LLM generate a new response
+            agent_app.update_state(sub_config, {"messages": cancel_messages}, as_node="sensitive_tools")
+            result = agent_app.invoke(None, sub_config)
+    else:
+        # Normal execution flow when not interrupted
+        initial_sub_state = {
+            "messages": list(state["messages"]) + tool_messages,
+            "current_iteration": 0,
+            "max_iterations": 3,
+            "conversation_id": conversation_id
+        }
+        result = agent_app.invoke(initial_sub_state, sub_config)
     
-    result = agent_app.invoke(initial_sub_state)
-    
+    # 2. AFTER EXECUTION, CHECK IF THE GRAPH HIT A SENSITIVE TOOL AND STOPPED
+    agent_state = agent_app.get_state(sub_config)
+    if agent_state and len(agent_state.next) > 0:
+        pending_tools = [tc["name"] for tc in result["messages"][-1].tool_calls if tc["name"] != "CompleteOrEscalate"]
+        tool_names = ", ".join(pending_tools)
+        
+        # Inject a fake AIMessage to prompt the user for confirmation on the UI/Terminal
+        from langchain_core.messages import AIMessage
+        hitl_msg = AIMessage(content=f"⚠️ **SECURITY CONFIRMATION REQUIRED** ⚠️\nI am about to perform the action: `{tool_names}`.\nDo you approve? (Reply 'yes' to proceed, 'no' to cancel).")
+        
+        updates = {"messages": tool_messages + [hitl_msg]}
+        current_dialog = state.get("dialog_state", [])
+        if not current_dialog or current_dialog[-1] != node_name:
+            updates["dialog_state"] = node_name
+        return updates
+
+    # 3. NORMAL EXIT: Get the final message and clean up hanging tool calls
     final_message = result["messages"][-1]
     cleanup_messages = []
     
-    # 🛟 SAFETY NET: Only intercept NON-CompleteOrEscalate dangling tool calls
     if hasattr(final_message, "tool_calls") and final_message.tool_calls:
         non_escalate_calls = [
             tc for tc in final_message.tool_calls 
-            if tc["name"] != "CompleteOrEscalate"  # <-- KEY FIX
+            if tc["name"] != "CompleteOrEscalate"
         ]
         if non_escalate_calls:
-            print(f"\n   [System] ⚠️ Intercepted dangling tool calls from {agent_name}. Applying safety net.")
             for tool_call in non_escalate_calls:
                 cleanup_messages.append(
                     ToolMessage(
-                        content="Agent stopped to ask for user confirmation or reached max iterations.",
+                        content="Agent stopped safely.",
                         name=tool_call["name"],
                         tool_call_id=tool_call["id"]
                     )
                 )
 
     updates = {"messages": tool_messages + [final_message] + cleanup_messages}
-    
     current_dialog = state.get("dialog_state", [])
     if not current_dialog or current_dialog[-1] != node_name:
         updates["dialog_state"] = node_name
-
-    # if not (hasattr(final_message, "tool_calls") and final_message.tool_calls):
-    #     updates["dialog_state"] = "pop"
         
     return updates
 

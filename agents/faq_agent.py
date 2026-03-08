@@ -9,6 +9,7 @@ from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
+from langgraph.checkpoint.memory import MemorySaver
 
 
 # Initialize model and bind tôl
@@ -94,6 +95,7 @@ def create_retrieval_agent():
     # Answer after retrieve the document
     workflow.add_edge("tools", "reasoner")
 
-    app = workflow.compile()
+    memory = MemorySaver()
+    app = workflow.compile(checkpointer=memory)
     
     return app

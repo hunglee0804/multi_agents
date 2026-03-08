@@ -2,6 +2,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
+from langgraph.checkpoint.memory import MemorySaver
 
 from multi_agents.config.variable import CHATBOT_MODEL, MAX_ITERATIONS
 from multi_agents.config.prompt import PLANNER_PROMPT, COORDINATOR_PROMPT
@@ -110,6 +111,7 @@ def create_it_support_agent():
     workflow.add_edge("tools", "coordinator")
 
     # Compile workflow to get the final agent app
-    app = workflow.compile()
+    memory = MemorySaver()
+    app = workflow.compile(checkpointer=memory)
     
     return app
