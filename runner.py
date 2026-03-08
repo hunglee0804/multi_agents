@@ -111,7 +111,7 @@ def execute_sub_agent(agent_app, state: AgenticState, agent_name: str, node_name
     initial_sub_state = {
         "messages": list(state["messages"]) + tool_messages,
         "current_iteration": 0,
-        "max_iterations": 7,
+        "max_iterations": 3,
         "conversation_id": state.get("conversation_id", "default")
     }
     
@@ -173,9 +173,9 @@ def leave_skill(state: AgenticState) -> dict:
                 
     return {"dialog_state": "pop", "messages": messages}
 
-# def force_leave_skill(state: AgenticState) -> dict:
-#     print("\n   [System] 🔙 Context switch detected! Forcefully leaving current skill...")
-#     return {"dialog_state": "pop"}
+def force_leave_skill(state: AgenticState) -> dict:
+    # print("\n   [System] 🔙 Context switch detected! Forcefully leaving current skill...")
+    return {"dialog_state": "pop"}
 
 # ==========================================
 # 4. CONDITIONAL ROUTING LOGIC
@@ -231,7 +231,7 @@ def create_hierarchical_runner():
     builder.add_node("enter_ticket", ticket_node)
     builder.add_node("enter_booking", booking_node)
     builder.add_node("leave_skill", leave_skill)
-    # builder.add_node("force_leave_skill", force_leave_skill) 
+    builder.add_node("force_leave_skill", force_leave_skill) 
 
     builder.add_conditional_edges(START, route_start)
 
@@ -246,7 +246,7 @@ def create_hierarchical_runner():
         builder.add_conditional_edges(agent, route_sub_agent, ["leave_skill", END])
 
     builder.add_edge("leave_skill", "primary_assistant")
-    # builder.add_edge("force_leave_skill", "primary_assistant")
+    builder.add_edge("force_leave_skill", "primary_assistant")
 
     memory = MemorySaver()
     return builder.compile(checkpointer=memory)
