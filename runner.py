@@ -66,8 +66,8 @@ primary_tools = [
 # ==========================================
 
 def primary_assistant_node(state: AgenticState) -> dict:
-    # Không giới hạn max_tokens để Primary có thể trả lời đầy đủ, nhưng temperature = 0 để giữ sự nghiêm túc
-    llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0).bind_tools(primary_tools + [CompleteOrEscalate ])
+    
+    llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0).bind_tools(primary_tools)
     
     system_prompt = (
         "You are the Primary Routing Assistant at FPT Software. "
@@ -143,8 +143,8 @@ def execute_sub_agent(agent_app, state: AgenticState, agent_name: str, node_name
     if not current_dialog or current_dialog[-1] != node_name:
         updates["dialog_state"] = node_name
 
-    if not (hasattr(final_message, "tool_calls") and final_message.tool_calls):
-        updates["dialog_state"] = "pop"
+    # if not (hasattr(final_message, "tool_calls") and final_message.tool_calls):
+    #     updates["dialog_state"] = "pop"
         
     return updates
 
@@ -154,22 +154,28 @@ def ticket_node(state: AgenticState) -> dict: return execute_sub_agent(ticket_ag
 def booking_node(state: AgenticState) -> dict: return execute_sub_agent(booking_agent, state, "BOOKING AGENT", "enter_booking")
 
 def leave_skill(state: AgenticState) -> dict:
-    """Pop the dialog state and securely resolve dangling CompleteOrEscalate tool calls."""
-    print("\n   [System] 🔙 Task completed. Returning to Primary Assistant (leave_skill)...")
+    """Pop the dialog state, resolve CompleteOrEscalate tool call, and preserve agent's exact answer."""
+    print("\n   [System] 🔙 Task completed. Releasing control (leave_skill)...")
     messages = []
     last_message = state["messages"][-1]
-    
     
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         for tool_call in last_message.tool_calls:
             if tool_call["name"] == "CompleteOrEscalate":
+                # Lấy câu trả lời gốc của Sub-Agent từ args của tool
+                final_answer = tool_call["args"].get("reason", "Task completed.")
+                
+                # 1. Trả về ToolMessage để thỏa mãn tool_call
                 messages.append(
                     ToolMessage(
-                        content= "Resuming dialog with the host assistant. Please reflect on the past conversation and assist the user as needed.",
+                        content="Successfully exited sub-agent.",
                         name=tool_call["name"],
                         tool_call_id=tool_call["id"]
                     )
                 )
+                # 2. Thêm một AIMessage chứa đúng nguyên văn câu trả lời (giữ nguyên link, format)
+                from langchain_core.messages import AIMessage
+                messages.append(AIMessage(content=final_answer))
                 
     return {"dialog_state": "pop", "messages": messages}
 
@@ -245,8 +251,8 @@ def create_hierarchical_runner():
     for agent in sub_agents:
         builder.add_conditional_edges(agent, route_sub_agent, ["leave_skill", END])
 
-    builder.add_edge("leave_skill", "primary_assistant")
-    builder.add_edge("force_leave_skill", "primary_assistant")
+    builder.add_edge("leave_skill", END)
+    builder.add_edge("force_leave_skill", END)
 
     memory = MemorySaver()
     return builder.compile(checkpointer=memory)

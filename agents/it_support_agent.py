@@ -30,20 +30,28 @@ def coordinator_node(state: ResearcherState) -> dict:
     """
     Coordinator Node: Execute the plan from Planner, call tools when needed, and produce final answer when sufficient info is gathered.
     """
-    # Formart prompt with iteration info for better context
     formatted_prompt = COORDINATOR_PROMPT.format(
-        iteration=state["current_iteration"] + 1,
+        iteration=state.get("current_iteration", 0) + 1,
         max_iterations=state.get("max_iterations", MAX_ITERATIONS),
     )
     
+    
+    critical_instruction = (
+        "\n\nCRITICAL INSTRUCTION: When you have gathered enough information to answer the user's query, "
+        "you MUST call the 'CompleteOrEscalate' tool. "
+        "You MUST put your ENTIRE final detailed answer (including all facts, links, and comparisons) "
+        "INSIDE the 'reason' parameter of the tool call. "
+        "DO NOT output the answer as plain text outside the tool call."
+    )
+
     response = coordinator_with_tools.invoke([
-        SystemMessage(content=formatted_prompt),
+        SystemMessage(content=formatted_prompt + critical_instruction),
         *state["messages"]
     ])
 
     return {
         "messages": [response], 
-        "current_iteration": state["current_iteration"] + 1
+        "current_iteration": state.get("current_iteration", 0) + 1
     }
 
 
@@ -80,7 +88,7 @@ def create_it_support_agent():
     # Add nodes: Planner, Coordinator, Tools
     workflow.add_node("planner", planner_node)
     workflow.add_node("coordinator", coordinator_node)
-    workflow.add_node("tools", ToolNode(TAVILY_ALL_TOOLS))
+    workflow.add_node("tools", ToolNode(TAVILY_ALL_TOOLS  + [CompleteOrEscalate]))
 
     # Set Planner as entry point
     workflow.set_entry_point("planner")

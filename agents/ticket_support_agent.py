@@ -25,11 +25,11 @@ from multi_agents.tools.context_tool import update_context_tool
 from multi_agents.context_injection.context_manager import get_conversation_context
 
 # Combine ticket tools with the new context tool
-ALL_TOOLS = TICKET_ALL_TOOLS + [update_context_tool]
+ALL_TOOLS = TICKET_ALL_TOOLS + [update_context_tool]  + [CompleteOrEscalate]
 
 # Initialize the LLM and bind the combined tools
 llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0)
-llm_with_tools = llm.bind_tools(ALL_TOOLS + [CompleteOrEscalate])
+llm_with_tools = llm.bind_tools(ALL_TOOLS)
 
 # ==========================================
 # NODE DEFINITIONS
@@ -55,10 +55,15 @@ def reasoner_node(state: TicketState) -> dict:
         context_msg += "No user identity saved yet.\n"
     
     context_msg += (
-        "\nCRITICAL INSTRUCTION: If the user provides their Name or Email, "
+        "\nCRITICAL INSTRUCTION 1: If the user provides their Name or Email, "
         "you MUST call 'update_context_tool' IMMEDIATELY before answering! "
         f"Use '{conversation_id}' as the conversation_id. "
-        "If their name is known, do not ask for it again."
+        "If their name is known, do not ask for it again.\n"
+        
+        "\nCRITICAL INSTRUCTION 2: If you need to ask the user for missing information, "
+        "DO NOT call any tools. Just reply with a normal conversational text message. "
+        "ONLY call the 'CompleteOrEscalate' tool AFTER you have successfully executed a database tool (like creating/updating a ticket) "
+        "OR if the user explicitly wants to cancel the request. Once finished, put your final success message in the 'reason' parameter of CompleteOrEscalate."
     )
 
     # Override/Inject the SystemMessage

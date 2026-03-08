@@ -23,11 +23,11 @@ from multi_agents.tools.context_tool import update_context_tool
 from multi_agents.context_injection.context_manager import get_conversation_context
 
 # Combine booking tools with the new context tool
-ALL_TOOLS = BOOKING_ALL_TOOLS + [update_context_tool]
+ALL_TOOLS = BOOKING_ALL_TOOLS + [update_context_tool]+ [CompleteOrEscalate]
 
 # Initialize the LLM and bind the booking tools
 llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0)
-llm_with_tools = llm.bind_tools(ALL_TOOLS + [CompleteOrEscalate])
+llm_with_tools = llm.bind_tools(ALL_TOOLS )
 
 # ==========================================
 # NODE DEFINITIONS
@@ -52,11 +52,10 @@ def reasoner_node(state: BookingState) -> dict:
         f"Use '{conversation_id}' as the conversation_id. "
         "If their name is known, do not ask for it again.\n"
         
-        "\nCRITICAL INSTRUCTION 2: When you have successfully completed the user's request "
-        "(e.g., ticket is created/updated/canceled), OR if you cannot proceed and need to escalate, "
-        "you MUST call the 'CompleteOrEscalate' tool. "
-        "This signals the system to return control to the Primary Assistant. "
-        "You can include a friendly final message to the user in the same response!"
+        "\nCRITICAL INSTRUCTION 2: If you need to ask the user for missing information, "
+        "DO NOT call any tools. Just reply with a normal conversational text message. "
+        "ONLY call the 'CompleteOrEscalate' tool AFTER you have successfully executed a database tool (like creating/updating a ticket) "
+        "OR if the user explicitly wants to cancel the request. Once finished, put your final success message in the 'reason' parameter of CompleteOrEscalate."
     )
 
     # Override SystemMessage to always update the latest memory

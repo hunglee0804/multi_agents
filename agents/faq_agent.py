@@ -13,8 +13,8 @@ from langgraph.prebuilt import ToolNode
 
 # Initialize model and bind tôl
 llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0)
-faq_tools = [retrieve_documents_tool]
-llm_with_tools = llm.bind_tools(faq_tools + [CompleteOrEscalate])
+faq_tools = [retrieve_documents_tool]  + [CompleteOrEscalate]
+llm_with_tools = llm.bind_tools(faq_tools)
 
 
 # Define node for ReAct graph
@@ -22,15 +22,18 @@ def reasoner_node(state: FAQState) -> dict:
     """
     Core node of ReAct: Anaylize question and decide tool or anwser.
     """
-    messages = state["messages"]
+    messages = list(state["messages"])
     
+   
     instruction = (
         "\n\nCRITICAL INSTRUCTION: When you have successfully answered the user's question, "
         "OR if you cannot proceed and need to escalate, you MUST call the 'CompleteOrEscalate' tool. "
-        "This signals the system to return control to the Primary Assistant. "
-        "You can include a friendly final message to the user in the same response!"
+        "You MUST put your ENTIRE detailed final answer (including any links, bullet points, or formatted text) "
+        "INSIDE the 'reason' parameter of the tool call. "
+        "DO NOT answer using plain text outside the tool call."
     )
     full_prompt = REACT_PROMPT + instruction
+    
     # Check SystemMessage. If it is not in, add it
     if messages and isinstance(messages[0], SystemMessage):
         messages[0] = SystemMessage(content=full_prompt)
