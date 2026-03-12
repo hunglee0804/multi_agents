@@ -54,8 +54,8 @@ def pop_dialog_state(state: AgenticState):
 class UpdateContextSchema(BaseModel):
     """Schema for updating the conversation context (user identity)."""
     conversation_id: str = Field(..., description="The current conversation ID.")
-    user_id: str = Field(default=None, description="The user's ID if known.")
-    email: str = Field(default=None, description="The user's email if known.")
+    user_id: Optional[str]= Field(default=None, description="The user's ID if known.")
+    email: Optional[str] = Field(default=None, description="The user's email if known.")
 
 # ==========================================
 # FAQ AGENT (REACT) SCHEMAS

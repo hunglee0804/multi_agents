@@ -10,15 +10,17 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage, AIMessage
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.prebuilt import ToolNode
 
 from multi_agents.config.config import *
 from multi_agents.config.variable import CHATBOT_MODEL
 from multi_agents.schemas.schemas import AgenticState, CompleteOrEscalate
+from multi_agents.tools.cache_tool import search_cache, save_to_cache
 
 from multi_agents.agents.faq_agent import create_retrieval_agent
 from multi_agents.agents.it_support_agent import create_it_support_agent
@@ -33,6 +35,12 @@ booking_agent = create_booking_agent()
 # ==========================================
 # 2. TRANSFER TOOLS FOR PRIMARY ASSISTANT
 # ==========================================
+
+@tool
+def check_cache_tool(query: str) -> str:
+    """Check FAISS cache FIRST for any FAQ or IT Support queries before transferring."""
+    result = search_cache(query)
+    return result if result else "NO_CACHE_FOUND"
 
 @tool
 def transfer_to_faq_agent() -> str:
@@ -55,6 +63,7 @@ def transfer_to_booking_agent() -> str:
     return "Transferred to Booking Agent"
 
 primary_tools = [
+    check_cache_tool,
     transfer_to_faq_agent, 
     transfer_to_it_agent, 
     transfer_to_ticket_agent, 
@@ -78,6 +87,10 @@ def primary_assistant_node(state: AgenticState) -> dict:
         "4. Searching the EXTERNAL web for public tech news or benchmarks (transfer_to_it_agent).\n\n"
         
         "CRITICAL RULES:\n"
+        "- CACHE FIRST: If the user asks an IT Support or FAQ question, YOU MUST call `check_cache_tool` with their exact question first.\n"
+        "- If `check_cache_tool` returns a real answer, present it to the user directly and DO NOT transfer.\n"
+        "- If `check_cache_tool` returns 'NO_CACHE_FOUND', proceed to call the appropriate transfer tool.\n"
+        "- For Booking and Tickets, DO NOT use cache, transfer directly.\n"
         "- OUT-OF-SCOPE & CHIT-CHAT: If the user says hello, or asks to do something OUTSIDE your 4 domains (e.g., ordering food, booking flights, personal advice), answer DIRECTLY. Politely decline and state what you can actually do. DO NOT call any transfer tools.\n"
         "- IN-SCOPE TASKS: If the request matches a domain, IMMEDIATELY call the correct transfer tool. DO NOT ask the user for specific details (like name, time, room, issue description) yourself. The specialized agent will do that.\n"
         "- MULTIPLE TASKS AT ONCE: If the user asks for multiple things in one sentence (e.g., 'book a room and log a ticket'), DO NOT call multiple tools at once. Call the transfer tool for the FIRST task ONLY, and politely tell the user you will handle the first task now and the second task later."
@@ -143,12 +156,19 @@ def execute_sub_agent(agent_app, state: AgenticState, agent_name: str, node_name
             agent_app.update_state(sub_config, {"messages": cancel_messages}, as_node="sensitive_tools")
             result = agent_app.invoke(None, sub_config)
         final_message = result["messages"][-1]
-        print(f"\n   [System] 🔙 Action resolved. Forcefully returning control to Primary Assistant.")
+        updates = {"messages": [final_message]}
         
-        return {
-            "messages": [final_message],
-            "dialog_state": "pop" 
-        }
+        
+        has_escalate = False
+        if hasattr(final_message, "tool_calls") and final_message.tool_calls:
+            if any(tc["name"] == "CompleteOrEscalate" for tc in final_message.tool_calls):
+                has_escalate = True
+                
+        if not has_escalate:
+            print(f"\n   [System] ⚠️ Agent forgot to auto-exit. Forcefully returning control to Primary.")
+            updates["dialog_state"] = "pop"
+            
+        return updates
     else:
         # Normal execution flow when not interrupted
         initial_sub_state = {
@@ -217,7 +237,15 @@ def leave_skill(state: AgenticState) -> dict:
             if tool_call["name"] == "CompleteOrEscalate":
                 # Lấy câu trả lời gốc của Sub-Agent từ args của tool
                 final_answer = tool_call["args"].get("reason", "Task completed.")
-                
+                current_dialog = state.get("dialog_state", [])
+                active_agent = current_dialog[-1] if current_dialog else "Unknown"
+                # Chỉ lưu cache cho FAQ và IT Support
+                if active_agent in ["enter_faq", "enter_it"]:
+                    # Tìm câu hỏi gần nhất của User
+                    last_human_msg = next((m.content for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), "")
+                    if last_human_msg:
+                        save_to_cache(query=last_human_msg, response=final_answer, query_type=active_agent)
+               
                 # 1. Trả về ToolMessage để thỏa mãn tool_call
                 messages.append(
                     ToolMessage(
@@ -227,14 +255,13 @@ def leave_skill(state: AgenticState) -> dict:
                     )
                 )
                 # 2. Thêm một AIMessage chứa đúng nguyên văn câu trả lời (giữ nguyên link, format)
-                from langchain_core.messages import AIMessage
                 messages.append(AIMessage(content=final_answer))
                 
     return {"dialog_state": "pop", "messages": messages}
 
-def force_leave_skill(state: AgenticState) -> dict:
-    # print("\n   [System] 🔙 Context switch detected! Forcefully leaving current skill...")
-    return {"dialog_state": "pop"}
+# def force_leave_skill(state: AgenticState) -> dict:
+#     print("\n   [System] 🔙 Context switch detected! Forcefully leaving current skill...")
+#     return {"dialog_state": "pop"}
 
 # ==========================================
 # 4. CONDITIONAL ROUTING LOGIC
@@ -255,7 +282,9 @@ def route_primary_assistant(state: AgenticState) -> str:
     last_message = state["messages"][-1]
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         tool_name = last_message.tool_calls[0]["name"]
-        if tool_name == "transfer_to_faq_agent": return "enter_faq"
+        if tool_name == "check_cache_tool":
+            return "primary_tools_node"
+        elif tool_name == "transfer_to_faq_agent": return "enter_faq"
         elif tool_name == "transfer_to_it_agent": return "enter_it"
         elif tool_name == "transfer_to_ticket_agent": return "enter_ticket"
         elif tool_name == "transfer_to_booking_agent": return "enter_booking"
@@ -290,27 +319,29 @@ def create_hierarchical_runner():
     builder = StateGraph(AgenticState)
 
     builder.add_node("primary_assistant", primary_assistant_node)
+    builder.add_node("primary_tools_node", ToolNode([check_cache_tool]))
     builder.add_node("enter_faq", faq_node)
     builder.add_node("enter_it", it_support_node)
     builder.add_node("enter_ticket", ticket_node)
     builder.add_node("enter_booking", booking_node)
     builder.add_node("leave_skill", leave_skill)
-    builder.add_node("force_leave_skill", force_leave_skill) 
+    # builder.add_node("force_leave_skill", force_leave_skill) 
 
     builder.add_conditional_edges(START, route_start)
 
     builder.add_conditional_edges(
         "primary_assistant", 
         route_primary_assistant, 
-        ["enter_faq", "enter_it", "enter_ticket", "enter_booking", END]
+        ["primary_tools_node", "enter_faq", "enter_it", "enter_ticket", "enter_booking", END]
     )
+    builder.add_edge("primary_tools_node", "primary_assistant")
 
     sub_agents = ["enter_faq", "enter_it", "enter_ticket", "enter_booking"]
     for agent in sub_agents:
         builder.add_conditional_edges(agent, route_sub_agent, ["leave_skill", END])
 
     builder.add_edge("leave_skill", END)
-    builder.add_edge("force_leave_skill", END)
+    # builder.add_edge("force_leave_skill", END)
 
     memory = MemorySaver()
     return builder.compile(checkpointer=memory)
