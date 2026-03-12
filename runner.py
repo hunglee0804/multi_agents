@@ -142,6 +142,13 @@ def execute_sub_agent(agent_app, state: AgenticState, agent_name: str, node_name
             # Force update the state with the cancellation messages and let the LLM generate a new response
             agent_app.update_state(sub_config, {"messages": cancel_messages}, as_node="sensitive_tools")
             result = agent_app.invoke(None, sub_config)
+        final_message = result["messages"][-1]
+        print(f"\n   [System] 🔙 Action resolved. Forcefully returning control to Primary Assistant.")
+        
+        return {
+            "messages": [final_message],
+            "dialog_state": "pop" 
+        }
     else:
         # Normal execution flow when not interrupted
         initial_sub_state = {
@@ -256,17 +263,22 @@ def route_primary_assistant(state: AgenticState) -> str:
 
 def route_sub_agent(state: AgenticState) -> str:
     """
-    Evaluates if ANY sub-agent called the CompleteOrEscalate tool to return to Primary.
-    Works universally for FAQ, IT, Ticket, and Booking agents!
+    Evaluates if ANY sub-agent called the CompleteOrEscalate tool to return to Primary,
+    OR if the state was deterministically popped.
     """
     last_message = state["messages"][-1]
-    active_agent = state.get("dialog_state", [])[-1] if state.get("dialog_state") else "Unknown Agent"
+    current_dialog = state.get("dialog_state", [])
     
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         if last_message.tool_calls[0]["name"] == "CompleteOrEscalate":
+            active_agent = current_dialog[-1] if current_dialog else "Unknown Agent"
             print(f"\n   [Router] ✅ {active_agent} triggered CompleteOrEscalate. Popping state.")
             return "leave_skill"
             
+    if not current_dialog:
+        return END
+        
+    active_agent = current_dialog[-1]
     print(f"\n   [Router] ⏳ {active_agent} needs more info. Waiting for user input.")
     return END
 

@@ -24,13 +24,13 @@ from multi_agents.tools.context_tool import update_context_tool
 from multi_agents.context_injection.context_manager import get_conversation_context
 
 # Combine booking tools with the new context tool
-safe_tools = [BOOKING_ALL_TOOLS[1], update_context_tool, CompleteOrEscalate] # check_booking
+safe_tools = [BOOKING_ALL_TOOLS[1], update_context_tool] # check_booking, update_context
 sensitive_tools = [BOOKING_ALL_TOOLS[0], BOOKING_ALL_TOOLS[2]] # create, update
 ALL_TOOLS = BOOKING_ALL_TOOLS + [update_context_tool]+ [CompleteOrEscalate]
 
 # Initialize the LLM and bind the booking tools
 llm = ChatOpenAI(model=CHATBOT_MODEL, temperature=0)
-llm_with_tools = llm.bind_tools(ALL_TOOLS )
+llm_with_tools = llm.bind_tools(ALL_TOOLS)
 
 # ==========================================
 # NODE DEFINITIONS
@@ -84,11 +84,15 @@ def should_continue(state: BookingState) -> str:
 
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         tool_name = last_message.tool_calls[0]["name"]
+        
         if tool_name == "CompleteOrEscalate":
             return "end"
+        
         if tool_name in [t.name for t in sensitive_tools]:
             return "sensitive_tools"
+            
         return "safe_tools"
+
     return "end"
 
 # ==========================================

@@ -123,7 +123,7 @@ class CreateTicketSchema(BaseModel):
     description: str = Field(..., description="A detailed description of the issue.")
     customer_name: str = Field(..., description="The full name of the customer.")
     customer_phone: str = Field(..., description="The phone number of the customer.")
-    email: str = Field(default=None, description="The email of the customer (optional).")
+    email: Optional[str] = Field(default=None, description="The email of the customer (optional).")
 
 class CheckTicketSchema(BaseModel):
     """Schema for checking the status of an existing ticket."""
@@ -150,10 +150,10 @@ class CreateBookingSchema(BaseModel):
     """Schema for creating a new booking."""
     customer_name: str = Field(..., description="The full name of the customer.")
     customer_phone: str = Field(..., description="The phone number of the customer.")
-    email: str = Field(default=None, description="The email of the customer (optional).")
+    email: Optional[str] = Field(default=None, description="The email of the customer (optional).")
     reason: str = Field(..., description="The reason or purpose for the booking.")
     time: str = Field(..., description="The requested booking time (format: YYYY-MM-DD HH:MM).")
-    note: str = Field(default=None, description="Any additional notes or special requests (optional).")
+    note: Optional[str] = Field(default=None, description="Any additional notes or special requests (optional).")
 
 class CheckBookingSchema(BaseModel):
     """Schema for checking the status of an existing booking."""
