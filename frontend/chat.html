@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FPT AI Assistant</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="chat-body">
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <button class="new-chat-btn" onclick="startNewChat()">
+                <i class="fas fa-plus"></i> Cuộc trò chuyện mới
+            </button>
+        </div>
+        <div class="conversation-list" id="conversation-list">
+            </div>
+        <div class="sidebar-footer">
+            <button class="logout-btn" onclick="logout()">
+                <i class="fas fa-sign-out-alt"></i> Đăng xuất
+            </button>
+        </div>
+    </div>
+
+    <div class="main-chat">
+        <div class="chat-header">
+            <h3 id="current-chat-title">FPT AI Assistant</h3>
+        </div>
+        
+        <div class="chat-history" id="chat-history">
+            <div class="welcome-message">
+                <h2>Xin chào Ke,</h2>
+                <p>Tôi có thể hỗ trợ gì cho hệ thống multi-agents của bạn hôm nay?</p>
+            </div>
+        </div>
+        
+        <div class="chat-input-container">
+            <form id="chat-form" onsubmit="sendMessage(event)">
+                <input type="text" id="message-input" placeholder="Nhập yêu cầu cho AI (IT Support, Booking, FAQ...)" required autocomplete="off">
+                <button type="submit" id="send-btn"><i class="fas fa-paper-plane"></i></button>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

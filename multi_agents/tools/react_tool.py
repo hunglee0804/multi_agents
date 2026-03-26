@@ -156,6 +156,8 @@ def bm25_search(queries: list, docs: list, top_k: int =5) -> list[Document]:
     """
     Perform BM25 search over given documents
     """
+    if not docs:
+        return []
 
     # Take corpus from documents
     corpus = [doc.page_content for doc in docs]

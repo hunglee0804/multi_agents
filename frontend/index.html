@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FPT AI - Login</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="auth-container">
+        <h2 id="auth-title">Đăng Nhập</h2>
+        
+        <form id="auth-form">
+            <div class="input-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" required placeholder="nhanvien@fpt.com">
+            </div>
+            <div class="input-group">
+                <label for="password">Mật khẩu</label>
+                <input type="password" id="password" required placeholder="••••••••">
+            </div>
+            
+            <button type="submit" class="btn" id="auth-btn">Đăng Nhập</button>
+        </form>
+
+        <div id="auth-message"></div>
+
+        <div class="toggle-auth">
+            <p id="toggle-text">Chưa có tài khoản? <span onclick="toggleAuthMode()">Đăng ký ngay</span></p>
+        </div>
+    </div>
+
+    <script>
+        let isLoginMode = true;
+
+        function toggleAuthMode() {
+            isLoginMode = !isLoginMode;
+            document.getElementById('auth-title').innerText = isLoginMode ? 'Đăng Nhập' : 'Đăng Ký Tài Khoản';
+            document.getElementById('auth-btn').innerText = isLoginMode ? 'Đăng Nhập' : 'Đăng Ký';
+            document.getElementById('toggle-text').innerHTML = isLoginMode 
+                ? 'Chưa có tài khoản? <span onclick="toggleAuthMode()">Đăng ký ngay</span>' 
+                : 'Đã có tài khoản? <span onclick="toggleAuthMode()">Đăng nhập</span>';
+            document.getElementById('auth-message').innerText = '';
+        }
+    </script>
+    
+    <script src="app.js"></script>
+</body>
+</html>

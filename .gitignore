@@ -1,3 +1,9 @@
 .env
 __pycache__/
-faiss_cache
+.venv
+
+data/
+database/
+faiss_cache/
+
+!/database/
