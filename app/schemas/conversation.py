@@ -4,23 +4,23 @@ from datetime import datetime
 from app.schemas.message import MessageDTO
 
 class ChatRequest(BaseModel):
-    """Schema cho payload Frontend gửi lên khi chat"""
+    """Schema for the payload the frontend sends during chat."""
     conversation_id: Optional[str] = None
     message: str
 
 class ChatResponse(BaseModel):
-    """Schema cho response trả về sau khi AI xử lý xong"""
+    """Schema for the response returned after AI processing is complete."""
     conversation_id: str
     response: str
 
 class ConversationListResponse(BaseModel):
-    """Schema cho danh sách hội thoại hiển thị ở Sidebar"""
+    """Schema for the list of conversations displayed in the sidebar."""
     id: str
     title: str
     created_at: datetime
 
 class ConversationDetailResponse(BaseModel):
-    """Schema cho chi tiết 1 cuộc hội thoại bao gồm lịch sử tin nhắn"""
+    """Schema for details of a conversation, including message history."""
     id: str
     title: str
     messages: List[MessageDTO]

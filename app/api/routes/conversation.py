@@ -38,9 +38,9 @@ def chat_with_agent(
     # 3. Gọi AI xử lý
     try:
         ai_result = process_user_message(conv.id, payload.message)
-        ai_response_text = ai_result.get("response", "Lỗi: Không có phản hồi từ AI.")
+        ai_response_text = ai_result.get("response", "Error: No response from AI.")
     except Exception as e:
-        ai_response_text = f"Hệ thống gặp lỗi nội bộ: {str(e)}"
+        ai_response_text = f"The system encountered an internal error: {str(e)}"
 
     # 4. Lưu tin nhắn của Assistant vào DB
     conversation_service.save_message(db, conv.id, role="assistant", content=ai_response_text)
@@ -70,11 +70,11 @@ def get_conversations(
     # 1. Kiểm tra Cache
     cached_list = cache_service.get_cache(cache_key)
     if cached_list:
-        print(f"⚡ [CACHE HIT] Trả về danh sách từ Redis ({cache_key})")
+        print(f"⚡ [CACHE HIT] Returns a list from Redis ({cache_key})")
         return cached_list
 
     # 2. Nếu Cache Miss, gọi DB
-    print(f"🐌 [CACHE MISS] Truy vấn Database cho ({cache_key})")
+    print(f"🐌 [CACHE MISS] Query the database for ({cache_key})")
     # Truyền thêm current_user.id vào service
     convs = conversation_service.get_conversations(db, current_user.id, skip=skip, limit=limit)
     
@@ -103,11 +103,11 @@ def get_conversation_detail(
     # 1. Kiểm tra Cache
     cached_detail = cache_service.get_cache(cache_key)
     if cached_detail:
-        print(f"⚡ [CACHE HIT] Trả về chi tiết từ Redis ({cache_key})")
+        print(f"⚡ [CACHE HIT] Return details from Redis ({cache_key})")
         return cached_detail
 
     # 2. Nếu Cache Miss, gọi DB
-    print(f"🐌 [CACHE MISS] Truy vấn Database cho ({cache_key})")
+    print(f"🐌 [CACHE MISS] Query the database for ({cache_key})")
     # Truyền thêm current_user.id vào service để tránh user này xem lén tin nhắn user khác
     conv = conversation_service.get_conversation_with_messages(db, conversation_id, current_user.id)
     if not conv:
@@ -124,3 +124,20 @@ def get_conversation_detail(
     cache_service.set_cache(cache_key, result_data)
     
     return result_data
+
+@router.delete("/backend-api/conversation/{conversation_id}")
+def delete_conversation(
+    conversation_id: str, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """API để xóa cuộc hội thoại"""
+    success = conversation_service.delete_conversation(db, conversation_id, current_user.id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Conversation not found or access denied")
+
+    # XÓA CACHE: Để Sidebar tải lại danh sách mới
+    cache_service.delete_cache(f"conversation_detail:{current_user.id}:{conversation_id}")
+    cache_service.delete_keys_by_pattern(f"conversations_list:{current_user.id}:*")
+
+    return {"message": "Deleted successfully"}

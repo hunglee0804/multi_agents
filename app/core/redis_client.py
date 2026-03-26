@@ -10,6 +10,6 @@ redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
 def check_redis_connection():
     try:
         redis_client.ping()
-        print("✅ Đã kết nối thành công tới Redis Server!")
+        print("✅ Successfully connected to the Redis Server!")
     except redis.ConnectionError:
-        print("⚠️ Không thể kết nối tới Redis Server. Vui lòng kiểm tra lại.")
+        print("⚠️ Unable to connect to the Redis server. Please check again.")

@@ -112,8 +112,21 @@ async function loadConversations() {
             convs.forEach(c => {
                 const div = document.createElement('div');
                 div.className = 'conv-item';
-                div.innerText = c.title;
-                div.onclick = () => loadConversationDetail(c.id, div);
+                
+                // Phần tiêu đề (Click vào để xem chat)
+                const titleSpan = document.createElement('span');
+                titleSpan.className = 'conv-title';
+                titleSpan.innerText = c.title;
+                titleSpan.onclick = () => loadConversationDetail(c.id, div);
+                
+                // Nút Xóa (Icon thùng rác)
+                const delBtn = document.createElement('button');
+                delBtn.className = 'delete-btn';
+                delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+                delBtn.onclick = (e) => deleteConversation(c.id, e); // Gọi hàm xóa
+                
+                div.appendChild(titleSpan);
+                div.appendChild(delBtn);
                 list.appendChild(div);
             });
         }
@@ -160,6 +173,31 @@ async function loadConversationDetail(id, element) {
     }
 }
 
+async function deleteConversation(id, event) {
+    // Ngăn sự kiện click lan truyền sang việc load lịch sử chat
+    event.stopPropagation(); 
+    
+    if (!confirm("Are you sure to delete this chat?")) return;
+
+    try {
+        const res = await fetchWithAuth(`${API_BASE_URL}/conversation/${id}`, {
+            method: 'DELETE'
+        });
+
+        if (res.ok) {
+            // Nếu đoạn chat đang mở bị xóa, reset lại khung chat chính
+            if (currentConversationId === id) {
+                startNewChat();
+            }
+            loadConversations(); // Tải lại Sidebar
+        } else {
+            alert("Error: Cannot delete chat.");
+        }
+    } catch (err) {
+        console.error("Error when deleting:", err);
+    }
+}
+
 async function sendMessage(e) {
     e.preventDefault();
     const input = document.getElementById('message-input');
@@ -170,15 +208,22 @@ async function sendMessage(e) {
     input.value = '';
     sendBtn.disabled = true;
 
-    // remove welcome message if present
+    // 1. remove welcome message if present
     const welcome = document.querySelector('.welcome-message');
     if (welcome) welcome.remove();
 
-    // append user message instantly
+    // 2. append user message instantly
     appendMessage('user', text);
     scrollToBottom();
 
+    // 3. THÊM ĐIỀU CHỈNH TẠI ĐÂY: Hiển thị tin nhắn "Loading" tạm thời
+    // Chúng ta tạo ra một tin nhắn mới có icon xoay và lưu lại DOM element của nó
+    const loadingMessageId = 'loading-' + Date.now();
+    appendMessage('assistant', `<i class="fas fa-spinner loading-spinner"></i> <span class="loading-text">Agent is executing...</span>`, loadingMessageId);
+    scrollToBottom();
+
     try {
+        // 4. Gọi API gửi tin nhắn
         const res = await fetchWithAuth(`${API_BASE_URL}/f/conversation`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -189,27 +234,44 @@ async function sendMessage(e) {
         });
 
         const data = await res.json();
-        if (res.ok) {
-            if (!currentConversationId) {
-                currentConversationId = data.conversation_id;
-                loadConversations(); // Reload sidebar to see new chat
+
+        // 5. THÊM ĐIỀU CHỈNH TẠI ĐÂY: Thay thế nội dung Loading bằng kết quả thực tế
+        const loadingMessageElement = document.getElementById(loadingMessageId);
+        if (loadingMessageElement) {
+            const contentDiv = loadingMessageElement.querySelector('.msg-content');
+            if (res.ok) {
+                if (!currentConversationId) {
+                    currentConversationId = data.conversation_id;
+                    loadConversations(); // Reload sidebar
+                }
+                // Thay thế icon spinner bằng nội dung AI trả về
+                contentDiv.innerHTML = data.response.replace(/\n/g, '<br>');
+            } else {
+                contentDiv.innerHTML = "Xin lỗi, đã xảy ra lỗi từ hệ thống API.";
             }
-            appendMessage('assistant', data.response);
-        } else {
-            appendMessage('assistant', "Sorry, an error occurred from the API.");
         }
+        
     } catch (err) {
-        appendMessage('assistant', "Could not connect to the FastAPI server.");
+        // Xử lý lỗi kết nối
+        const loadingMessageElement = document.getElementById(loadingMessageId);
+        if (loadingMessageElement) {
+            loadingMessageElement.querySelector('.msg-content').innerHTML = "Unable to connect to the FastAPI server.";
+        }
     } finally {
         sendBtn.disabled = false;
         scrollToBottom();
     }
 }
 
-function appendMessage(role, content) {
+// Cập nhật hàm appendMessage để hỗ trợ custom ID (tham số thứ 3)
+function appendMessage(role, content, customId = null) {
     const history = document.getElementById('chat-history');
     const div = document.createElement('div');
     div.className = `message ${role}`;
+    
+    // Nếu có truyền customId (như 'loading-...'), thì dùng nó,
+    // nếu không, tự sinh một ID tạm (cho tin nhắn cũ/user)
+    div.id = customId || ('msg-' + Date.now());
     
     // Add Avatar for AI
     if (role === 'assistant') {

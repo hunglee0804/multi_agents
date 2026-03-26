@@ -3,12 +3,12 @@ import uuid
 from langchain_core.messages import HumanMessage
 from multi_agents.runner import create_hierarchical_runner # Hàm bạn đã có
 
-# Khởi tạo master chatbot 1 lần khi start server
+# Initialize the master chatbot once when the server starts.
 app_graph = create_hierarchical_runner()
 
 def process_user_message(conversation_id: str, user_message: str) -> dict:
     """
-    Hàm này nhận message từ API, đưa vào LangGraph và trả về kết quả
+    This function receives a message from the API, passes it to LangGraph, and returns the result.
     """
     config = {"configurable": {"thread_id": conversation_id}}
     
@@ -17,10 +17,10 @@ def process_user_message(conversation_id: str, user_message: str) -> dict:
         "conversation_id": conversation_id
     }
     
-    # Chạy graph
+    # Run graph
     result = app_graph.invoke(input_state, config=config)
     
-    # Lấy tin nhắn cuối cùng của assistant
+    # Get the assistant's last message.
     assistant_message = result["messages"][-1]
     
     return {

@@ -175,16 +175,43 @@ body {
 }
 
 .conv-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     padding: 10px 15px;
     margin-bottom: 4px;
     border-radius: 8px;
     cursor: pointer;
     color: var(--text-secondary);
+    font-size: 14px;
+    transition: background 0.2s, color 0.2s;
+}
+
+.conv-title {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: 14px;
-    transition: background 0.2s, color 0.2s;
+    flex-grow: 1;
+    padding-right: 10px;
+}
+
+.delete-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    opacity: 0; /* Ẩn mặc định */
+    transition: opacity 0.2s, color 0.2s;
+}
+
+/* Hiện nút xóa khi hover vào item */
+.conv-item:hover .delete-btn {
+    opacity: 1; 
+}
+
+.delete-btn:hover {
+    color: #ff5252; /* Chuyển màu đỏ khi hover vào nút xóa */
 }
 
 .conv-item:hover {
@@ -362,4 +389,17 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
     background: #444;
+}
+/* --- LOADING SPINNER STYLES --- */
+.message.assistant .msg-content {
+    display: flex;
+    align-items: center;
+    gap: 10px; /* Khoảng cách giữa icon và chữ */
+}
+
+/* Định dạng cho icon xoay */
+.loading-spinner {
+    color: var(--accent-color);
+    font-size: 16px;
+    animation: fa-spin 1.5s infinite linear; /* Hiệu ứng xoay của Font Awesome */
 }
