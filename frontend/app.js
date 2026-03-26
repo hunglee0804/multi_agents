@@ -8,6 +8,7 @@ if (authForm) {
         e.preventDefault();
         const email = document.getElementById('email').value;
         const password = document.getElementById('password').value;
+        const fullname = document.getElementById('fullname').value;
         const messageDiv = document.getElementById('auth-message');
         const btn = document.getElementById('auth-btn');
 
@@ -30,6 +31,7 @@ if (authForm) {
                 const data = await res.json();
                 if (res.ok) {
                     localStorage.setItem('token', data.access_token);
+                    localStorage.setItem('full_name', data.full_name);
                     window.location.href = 'chat.html'; // Chuyển sang chat
                 } else {
                     messageDiv.innerText = data.detail || 'Wrong email or password!';
@@ -39,7 +41,11 @@ if (authForm) {
                 const res = await fetch(`${API_BASE_URL}/auth/register`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: email, password: password })
+                    body: JSON.stringify({
+                        email: email,
+                        password: password,
+                        full_name: fullname
+                    })
                 });
 
                 const data = await res.json();
@@ -67,6 +73,15 @@ function toggleAuthMode() {
         ? 'Don not have an account yet? <span onclick="toggleAuthMode()">Register now</span>' 
         : 'Already have an account? <span onclick="toggleAuthMode()">Log in</span>';
     document.getElementById('auth-message').innerText = '';
+    const nameGroup = document.getElementById('name-group');
+    const nameInput = document.getElementById('fullname');
+    if (isLoginMode) {
+        nameGroup.style.display = 'none';
+        nameInput.removeAttribute('required'); // Không bắt buộc nhập khi đang ở màn hình Đăng Nhập
+    } else {
+        nameGroup.style.display = 'block';
+        nameInput.setAttribute('required', 'true'); // Bắt buộc nhập khi Đăng Ký
+    }
 }
 
 // --- CHAT PAGE LOGIC (chat.html) ---
@@ -78,6 +93,11 @@ if (window.location.pathname.includes('chat.html')) {
         window.location.href = 'index.html'; // redirect if not logged in
     } else {
         loadConversations();
+        const welcomeText = document.getElementById('welcome-text');
+        if (welcomeText) {
+            const fullName = localStorage.getItem('full_name') || 'employee';
+            welcomeText.innerText = `Hello ${fullName},`;
+        }
     }
 }
 
@@ -137,9 +157,10 @@ async function loadConversations() {
 
 function startNewChat() {
     currentConversationId = null;
+    const fullName = localStorage.getItem('full_name') || 'employee';
     document.getElementById('chat-history').innerHTML = `
         <div class="welcome-message">
-            <h2>Hello</h2>
+            <h2 id="welcome-text">Hello ${fullName},</h2>
             <p>I am a multi-system integrated AI support. How can I assist with what you are doing today?</p>
         </div>
     `;

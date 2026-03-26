@@ -22,3 +22,4 @@ class UserResponse(UserBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    full_name: Optional[str] = None

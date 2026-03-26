@@ -17,7 +17,11 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     
     hashed_password = get_password_hash(user.password)
     # Khởi tạo User với trường email
-    new_user = User(email=user.email, hashed_password=hashed_password)
+    new_user = User(
+        email=user.email, 
+        hashed_password=hashed_password,
+        full_name=user.full_name 
+    )
     db.add(new_user)
     db.commit()
     return {"message": "User created successfully"}
@@ -34,4 +38,9 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     
     # Tạo JWT Token (dùng email làm subject)
     access_token = create_access_token(data={"sub": user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
+    display_name = user.full_name if user.full_name else user.email.split('@')[0]
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "full_name": display_name
+    }
