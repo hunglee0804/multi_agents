@@ -3,7 +3,7 @@ __pycache__/
 .venv
 
 data/
-database/
+# database/
 faiss_cache/
 
-!/database/
+# !/database/

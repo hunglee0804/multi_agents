@@ -1,19 +1,21 @@
 :root {
-    --bg-color: #131314;
-    --sidebar-bg: #1e1f20;
-    --text-primary: #e3e3e3;
-    --text-secondary: #c4c7c5;
-    --accent-color: #a8c7fa;
-    --border-color: #444746;
-    --message-user: #282a2c;
-    --message-bot: #131314;
+    --bg-color: #121212;
+    --sidebar-bg: #181818;
+    --text-primary: #e0e0e0;
+    --text-secondary: #aaaaaa;
+    --accent-color: #005691; /* FPT Blue */
+    --accent-hover: #00406e;
+    --border-color: #2a2a2a;
+    --message-user: #2c2c2c;
+    --message-bot: #121212;
+    --gradient-bot: linear-gradient(135deg, #a8c7fa, #c58bf2);
 }
 
 * {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 body {
@@ -21,25 +23,42 @@ body {
     color: var(--text-primary);
     height: 100vh;
     display: flex;
+    overflow: hidden; /* Ngăn chặn cuộn toàn body */
+}
+
+/* --- LOGO STYLES --- */
+.fpt-logo {
+    display: block;
+    margin: 0 auto;
+    object-fit: contain;
+}
+
+/* --- AUTH PAGE STYLES --- */
+.auth-page-body {
     justify-content: center;
     align-items: center;
 }
 
-/* --- AUTH PAGE STYLES --- */
 .auth-container {
     background-color: var(--sidebar-bg);
     padding: 40px;
     border-radius: 12px;
     width: 100%;
-    max-width: 400px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    max-width: 420px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
     border: 1px solid var(--border-color);
+}
+
+.auth-container .fpt-logo {
+    margin-bottom: 30px;
+    width: 140px;
 }
 
 .auth-container h2 {
     text-align: center;
     margin-bottom: 24px;
     color: var(--accent-color);
+    font-size: 1.5rem;
 }
 
 .input-group {
@@ -61,27 +80,28 @@ body {
     background-color: var(--bg-color);
     color: var(--text-primary);
     outline: none;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .input-group input:focus {
     border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(0, 86, 145, 0.3);
 }
 
 .btn {
     width: 100%;
     padding: 12px;
     background-color: var(--accent-color);
-    color: #041e49;
+    color: white;
     border: none;
     border-radius: 24px;
     font-weight: 600;
     cursor: pointer;
-    transition: opacity 0.2s;
+    transition: background 0.2s;
 }
 
 .btn:hover {
-    opacity: 0.9;
+    background-color: var(--accent-hover);
 }
 
 .toggle-auth {
@@ -105,22 +125,23 @@ body {
 }
 
 /* --- CHAT PAGE STYLES --- */
-.chat-body {
-    display: flex;
-    width: 100vw;
-    justify-content: flex-start;
-}
-
 .sidebar {
-    width: 260px;
+    width: 280px;
     background-color: var(--sidebar-bg);
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--border-color);
+    flex-shrink: 0;
 }
 
-.sidebar-header, .sidebar-footer {
+.sidebar-header {
     padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-header .fpt-logo {
+    width: 110px;
+    margin-bottom: 15px;
 }
 
 .new-chat-btn, .logout-btn {
@@ -132,33 +153,54 @@ body {
     border-radius: 8px;
     cursor: pointer;
     text-align: left;
-    transition: background 0.2s;
+    transition: background 0.2s, color 0.2s;
+    font-size: 14px;
 }
 
 .new-chat-btn:hover, .logout-btn:hover {
-    background-color: rgba(255,255,255,0.1);
+    background-color: rgba(255,255,255,0.05);
 }
 
 .conversation-list {
     flex-grow: 1;
     overflow-y: auto;
-    padding: 0 10px;
+    padding: 10px;
+}
+
+.conversation-list h4 {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-bottom: 10px;
+    padding-left: 10px;
 }
 
 .conv-item {
-    padding: 12px;
-    margin-bottom: 5px;
+    padding: 10px 15px;
+    margin-bottom: 4px;
     border-radius: 8px;
     cursor: pointer;
     color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-size: 14px;
+    transition: background 0.2s, color 0.2s;
 }
 
-.conv-item:hover, .conv-item.active {
-    background-color: rgba(255,255,255,0.05);
+.conv-item:hover {
+    background-color: rgba(255,255,255,0.03);
     color: var(--text-primary);
+}
+
+.conv-item.active {
+    background-color: rgba(0, 86, 145, 0.1); /* Subtle blue active */
+    color: var(--accent-color);
+    font-weight: 500;
+}
+
+.sidebar-footer {
+    padding: 20px;
+    border-top: 1px solid var(--border-color);
 }
 
 .main-chat {
@@ -167,45 +209,57 @@ body {
     flex-direction: column;
     background-color: var(--bg-color);
     position: relative;
+    width: 100%;
 }
 
 .chat-header {
     padding: 20px;
     border-bottom: 1px solid var(--border-color);
     text-align: center;
+    background-color: var(--bg-color);
+    z-index: 10;
 }
 
 .chat-history {
     flex-grow: 1;
-    padding: 20px 15%;
+    padding: 20px 10%; /* More generous padding */
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 24px;
-    padding-bottom: 120px; /* Chừa không gian cho input */
+    gap: 20px;
+    position: relative;
+}
+
+/* Sửa lỗi cuộn: đảm bảo content có chiều cao thật */
+.chat-history::after {
+    content: '';
+    display: block;
+    height: 10px;
 }
 
 .welcome-message {
     margin: auto;
     text-align: center;
     color: var(--text-secondary);
+    max-width: 600px;
 }
 
 .welcome-message h2 {
     background: -webkit-linear-gradient(45deg, #a8c7fa, #c58bf2);
     -webkit-background-clip: text;
-    background-clip: text;
+    background-clip: text; /* THÊM DÒNG NÀY VÀO ĐÂY */
     -webkit-text-fill-color: transparent;
     font-size: 2.5rem;
     margin-bottom: 10px;
+    font-weight: 700;
 }
 
 /* --- MESSAGE STYLES --- */
 .message {
     display: flex;
-    gap: 16px;
-    max-width: 85%;
-    font-size: 15px;
+    gap: 12px;
+    max-width: 80%;
+    font-size: 14px;
     line-height: 1.6;
 }
 
@@ -216,8 +270,8 @@ body {
 
 .message.user .msg-content {
     background-color: var(--message-user);
-    padding: 12px 20px;
-    border-radius: 24px;
+    padding: 10px 16px;
+    border-radius: 18px;
     border-bottom-right-radius: 4px;
 }
 
@@ -226,43 +280,46 @@ body {
 }
 
 .message.assistant .msg-content {
-    padding: 4px 0; /* Căn ngang hàng với avatar */
+    background-color: var(--message-bot);
+    padding: 10px 0;
+    width: 100%;
 }
 
 /* --- AVATAR --- */
 .avatar {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    margin-top: 4px; /* Align top with first line */
 }
 
 .ai-avatar {
-    background: linear-gradient(135deg, #a8c7fa, #c58bf2);
-    color: #131314;
-    font-size: 18px;
+    background: var(--gradient-bot);
+    color: #121212;
+    font-size: 16px;
 }
 
 /* --- CHAT INPUT --- */
 .chat-input-container {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    padding: 20px 15%;
+    padding: 20px 10%;
     background: linear-gradient(180deg, transparent, var(--bg-color) 40%);
+    position: sticky;
+    bottom: 0;
+    width: 100%;
+    z-index: 10;
 }
 
 #chat-form {
     display: flex;
     background-color: var(--sidebar-bg);
-    border-radius: 32px;
-    padding: 8px 16px;
+    border-radius: 28px;
+    padding: 5px 15px;
     border: 1px solid var(--border-color);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
 
 #message-input {
@@ -272,7 +329,7 @@ body {
     color: var(--text-primary);
     padding: 12px;
     outline: none;
-    font-size: 15px;
+    font-size: 14px;
 }
 
 #send-btn {
@@ -289,7 +346,20 @@ body {
     cursor: not-allowed;
 }
 
-strong {
-    color: #fff;
-    font-weight: 600;
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #444;
 }

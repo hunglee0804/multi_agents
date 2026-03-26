@@ -3,48 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FPT AI - Login</title>
+    <title>FPT AI Assistant - Login</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body>
+<body class="auth-page-body">
 
     <div class="auth-container">
-        <h2 id="auth-title">Đăng Nhập</h2>
+        <img src="image_2301e1.png" alt="FPT Logo" class="fpt-logo">
+        
+        <h2 id="auth-title">Log in</h2>
         
         <form id="auth-form">
             <div class="input-group">
                 <label for="email">Email</label>
-                <input type="email" id="email" required placeholder="nhanvien@fpt.com">
+                <input type="email" id="email" required placeholder="employee@fpt.com">
             </div>
             <div class="input-group">
-                <label for="password">Mật khẩu</label>
+                <label for="password">Password</label>
                 <input type="password" id="password" required placeholder="••••••••">
             </div>
             
-            <button type="submit" class="btn" id="auth-btn">Đăng Nhập</button>
+            <button type="submit" class="btn" id="auth-btn">Log in</button>
         </form>
 
         <div id="auth-message"></div>
 
         <div class="toggle-auth">
-            <p id="toggle-text">Chưa có tài khoản? <span onclick="toggleAuthMode()">Đăng ký ngay</span></p>
+            <p id="toggle-text">Don't have an account yet? <span onclick="toggleAuthMode()">Register now</span></p>
         </div>
     </div>
 
-    <script>
-        let isLoginMode = true;
-
-        function toggleAuthMode() {
-            isLoginMode = !isLoginMode;
-            document.getElementById('auth-title').innerText = isLoginMode ? 'Đăng Nhập' : 'Đăng Ký Tài Khoản';
-            document.getElementById('auth-btn').innerText = isLoginMode ? 'Đăng Nhập' : 'Đăng Ký';
-            document.getElementById('toggle-text').innerHTML = isLoginMode 
-                ? 'Chưa có tài khoản? <span onclick="toggleAuthMode()">Đăng ký ngay</span>' 
-                : 'Đã có tài khoản? <span onclick="toggleAuthMode()">Đăng nhập</span>';
-            document.getElementById('auth-message').innerText = '';
-        }
-    </script>
-    
     <script src="app.js"></script>
 </body>
 </html>

@@ -1,8 +1,7 @@
 const API_BASE_URL = 'http://127.0.0.1:8000/backend-api';
+let isLoginMode = true;
 
-// ==========================================
-// 1. LOGIC TRANG ĐĂNG NHẬP (index.html)
-// ==========================================
+// --- AUTH PAGE LOGIC (index.html) ---
 const authForm = document.getElementById('auth-form');
 if (authForm) {
     authForm.addEventListener('submit', async (e) => {
@@ -13,10 +12,11 @@ if (authForm) {
         const btn = document.getElementById('auth-btn');
 
         btn.disabled = true;
-        messageDiv.innerText = 'Đang kết nối tới server...';
+        messageDiv.innerText = 'Connecting...';
 
         try {
             if (isLoginMode) {
+                // LOGIN
                 const formData = new URLSearchParams();
                 formData.append('username', email); 
                 formData.append('password', password);
@@ -30,11 +30,12 @@ if (authForm) {
                 const data = await res.json();
                 if (res.ok) {
                     localStorage.setItem('token', data.access_token);
-                    window.location.href = 'chat.html';
+                    window.location.href = 'chat.html'; // Chuyển sang chat
                 } else {
-                    messageDiv.innerText = data.detail || 'Sai email hoặc mật khẩu!';
+                    messageDiv.innerText = data.detail || 'Wrong email or password!';
                 }
             } else {
+                // REGISTER
                 const res = await fetch(`${API_BASE_URL}/auth/register`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -44,29 +45,37 @@ if (authForm) {
                 const data = await res.json();
                 if (res.ok) {
                     messageDiv.style.color = 'var(--accent-color)';
-                    messageDiv.innerText = 'Đăng ký thành công! Đang chuyển sang đăng nhập...';
+                    messageDiv.innerText = 'Registered successfully! Switching to login...';
                     setTimeout(() => toggleAuthMode(), 1500);
                 } else {
-                    messageDiv.innerText = data.detail || 'Lỗi đăng ký!';
+                    messageDiv.innerText = data.detail || 'Registration failed!';
                 }
             }
         } catch (err) {
-            messageDiv.innerText = 'Không thể kết nối tới server.';
+            messageDiv.innerText = 'Could not connect to the server.';
         } finally {
             btn.disabled = false;
         }
     });
 }
 
-// ==========================================
-// 2. LOGIC TRANG CHAT (chat.html)
-// ==========================================
+function toggleAuthMode() {
+    isLoginMode = !isLoginMode;
+    document.getElementById('auth-title').innerText = isLoginMode ? 'Log in' : 'Register an Account';
+    document.getElementById('auth-btn').innerText = isLoginMode ? 'Log in' : 'Register';
+    document.getElementById('toggle-text').innerHTML = isLoginMode 
+        ? 'Don not have an account yet? <span onclick="toggleAuthMode()">Register now</span>' 
+        : 'Already have an account? <span onclick="toggleAuthMode()">Log in</span>';
+    document.getElementById('auth-message').innerText = '';
+}
+
+// --- CHAT PAGE LOGIC (chat.html) ---
 let currentConversationId = null;
 
 if (window.location.pathname.includes('chat.html')) {
     const token = localStorage.getItem('token');
     if (!token) {
-        window.location.href = 'index.html'; 
+        window.location.href = 'index.html'; // redirect if not logged in
     } else {
         loadConversations();
     }
@@ -84,7 +93,7 @@ async function fetchWithAuth(url, options = {}) {
         'Authorization': `Bearer ${token}`
     };
     const response = await fetch(url, { ...options, headers });
-    if (response.status === 401) logout();
+    if (response.status === 401) logout(); // if unauthorized, logout
     return response;
 }
 
@@ -94,7 +103,12 @@ async function loadConversations() {
         if (res.ok) {
             const convs = await res.json();
             const list = document.getElementById('conversation-list');
+            
+            // Keep the header "Saved conversations"
+            const header = list.querySelector('h4');
             list.innerHTML = '';
+            if (header) list.appendChild(header);
+
             convs.forEach(c => {
                 const div = document.createElement('div');
                 div.className = 'conv-item';
@@ -104,7 +118,7 @@ async function loadConversations() {
             });
         }
     } catch (err) {
-        console.error("Lỗi tải danh sách:", err);
+        console.error("Error loading conversations:", err);
     }
 }
 
@@ -112,8 +126,8 @@ function startNewChat() {
     currentConversationId = null;
     document.getElementById('chat-history').innerHTML = `
         <div class="welcome-message">
-            <h2>Xin chào Ke,</h2>
-            <p>Tôi có thể hỗ trợ gì cho hệ thống multi-agents của bạn hôm nay?</p>
+            <h2>Hello</h2>
+            <p>I am a multi-system integrated AI support. How can I assist with what you are doing today?</p>
         </div>
     `;
     document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
@@ -123,6 +137,7 @@ function startNewChat() {
 async function loadConversationDetail(id, element) {
     currentConversationId = id;
     
+    // update active state in sidebar
     document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
     if(element) element.classList.add('active');
 
@@ -141,7 +156,7 @@ async function loadConversationDetail(id, element) {
             scrollToBottom();
         }
     } catch (err) {
-        console.error("Lỗi tải chi tiết:", err);
+        console.error("Error loading conversation detail:", err);
     }
 }
 
@@ -155,14 +170,12 @@ async function sendMessage(e) {
     input.value = '';
     sendBtn.disabled = true;
 
+    // remove welcome message if present
     const welcome = document.querySelector('.welcome-message');
     if (welcome) welcome.remove();
 
+    // append user message instantly
     appendMessage('user', text);
-    scrollToBottom();
-
-    // Lưu lại ID của dòng loading
-    const loadingId = appendMessage('assistant', '<i class="fas fa-circle-notch fa-spin"></i> Các Agent đang xử lý...');
     scrollToBottom();
 
     try {
@@ -179,62 +192,39 @@ async function sendMessage(e) {
         if (res.ok) {
             if (!currentConversationId) {
                 currentConversationId = data.conversation_id;
-                loadConversations(); 
+                loadConversations(); // Reload sidebar to see new chat
             }
-            updateMessage(loadingId, data.response);
+            appendMessage('assistant', data.response);
         } else {
-            updateMessage(loadingId, "Xin lỗi, đã xảy ra lỗi từ hệ thống API.");
+            appendMessage('assistant', "Sorry, an error occurred from the API.");
         }
     } catch (err) {
-        updateMessage(loadingId, "Không thể kết nối tới server FastAPI.");
+        appendMessage('assistant', "Could not connect to the FastAPI server.");
     } finally {
         sendBtn.disabled = false;
         scrollToBottom();
     }
 }
 
-// --- UI Helpers ---
-
-// Hàm xử lý định dạng text (xuống dòng và in đậm)
-function formatText(text) {
-    let formatted = text.replace(/\n/g, '<br>');
-    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    return formatted;
-}
-
 function appendMessage(role, content) {
     const history = document.getElementById('chat-history');
     const div = document.createElement('div');
-    
-    // FIX BUG ID: Thêm Math.random() để đảm bảo id luôn luôn khác nhau
-    const id = 'msg-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
-    div.id = id;
     div.className = `message ${role}`;
     
-    // Giao diện có Avatar giống Gemini
+    // Add Avatar for AI
     if (role === 'assistant') {
         div.innerHTML = `
             <div class="avatar ai-avatar"><i class="fas fa-robot"></i></div>
-            <div class="msg-content">${formatText(content)}</div>
+            <div class="msg-content">${content.replace(/\n/g, '<br>')}</div>
         `;
     } else {
+        // User messages don't have avatar
         div.innerHTML = `
-            <div class="msg-content">${formatText(content)}</div>
+            <div class="msg-content">${content.replace(/\n/g, '<br>')}</div>
         `;
     }
     
     history.appendChild(div);
-    return id;
-}
-
-function updateMessage(id, content) {
-    const div = document.getElementById(id);
-    if (div) {
-        const contentDiv = div.querySelector('.msg-content');
-        if (contentDiv) {
-            contentDiv.innerHTML = formatText(content);
-        }
-    }
 }
 
 function scrollToBottom() {
