@@ -1,20 +1,22 @@
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import uuid
 import os
 import sys
 from langchain.tools import tool
+from dotenv import load_dotenv
+
+load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:admin123@localhost:5432/fpt_support_db")
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from multi_agents.config.variable import SQLITE_DB_PATH
 from multi_agents.schemas.schemas import CreateTicketSchema, CheckTicketSchema, UpdateTicketStatusSchema
 
 def get_db_connection():
-    conn = sqlite3.connect(SQLITE_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return psycopg2.connect(DATABASE_URL)
 
 @tool("create_ticket_tool", args_schema=CreateTicketSchema)
 def create_ticket_tool(content: str, description: str, customer_name: str, customer_phone: str, email: str = None) -> str:
@@ -26,7 +28,7 @@ def create_ticket_tool(content: str, description: str, customer_name: str, custo
         
         cursor.execute(
             '''INSERT INTO tickets (ticket_id, content, description, customer_name, customer_phone, email, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?)''',
+               VALUES (%s, %s, %s, %s, %s, %s, %s)''',
             (ticket_id, content, description, customer_name, customer_phone, email, "Pending")
         )
         conn.commit()
@@ -40,8 +42,8 @@ def check_ticket_status_tool(ticket_id: str) -> str:
     """Query the database to check the current status and details of a specific ticket."""
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM tickets WHERE ticket_id = ?", (ticket_id,))
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("SELECT * FROM tickets WHERE ticket_id = %s", (ticket_id,))
         ticket = cursor.fetchone()
         conn.close()
         
@@ -69,20 +71,16 @@ def update_ticket_status_tool(ticket_id: str, new_status: str) -> str:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT ticket_id FROM tickets WHERE ticket_id = ?", (ticket_id,))
+        cursor.execute("SELECT ticket_id FROM tickets WHERE ticket_id = %s", (ticket_id,))
         if not cursor.fetchone():
             conn.close()
             return f"Error: No ticket found with ID '{ticket_id}'."
             
-        cursor.execute("UPDATE tickets SET status = ? WHERE ticket_id = ?", (new_status, ticket_id))
+        cursor.execute("UPDATE tickets SET status = %s WHERE ticket_id = %s", (new_status, ticket_id))
         conn.commit()
         conn.close()
         return f"Successfully updated ticket {ticket_id} to status: '{new_status}'."
     except Exception as e:
         return f"Failed to update ticket status due to database error: {str(e)}"
 
-# IMPORTANT: Add the new tool to the list
 TICKET_ALL_TOOLS = [create_ticket_tool, check_ticket_status_tool, update_ticket_status_tool]
-
-if __name__ == "__main__":
-    print("✅ ticket_tool.py loaded successfully. Import paths are correct and tools are ready!")

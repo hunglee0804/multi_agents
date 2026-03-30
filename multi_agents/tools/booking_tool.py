@@ -1,20 +1,22 @@
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import uuid
 import os
 import sys
 from langchain.tools import tool
+from dotenv import load_dotenv
+
+load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:admin123@localhost:5432/fpt_support_db")
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from multi_agents.config.variable import SQLITE_DB_PATH
 from multi_agents.schemas.schemas import CreateBookingSchema, CheckBookingSchema, UpdateBookingStatusSchema
 
 def get_db_connection():
-    conn = sqlite3.connect(SQLITE_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return psycopg2.connect(DATABASE_URL)
 
 @tool("create_booking_tool", args_schema=CreateBookingSchema)
 def create_booking_tool(customer_name: str, customer_phone: str, reason: str, time: str, email: str = None, note: str = None) -> str:
@@ -24,9 +26,10 @@ def create_booking_tool(customer_name: str, customer_phone: str, reason: str, ti
         conn = get_db_connection()
         cursor = conn.cursor()
         
+        # CHÚ Ý: Đổi ? thành %s
         cursor.execute(
             '''INSERT INTO bookings (booking_id, customer_name, customer_phone, email, reason, time, note, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)''',
             (booking_id, customer_name, customer_phone, email, reason, time, note, "Scheduled")
         )
         conn.commit()
@@ -40,8 +43,9 @@ def check_booking_status_tool(booking_id: str) -> str:
     """Query the database to check the current status and details of a specific booking."""
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM bookings WHERE booking_id = ?", (booking_id,))
+        # Dùng RealDictCursor để truy cập dữ liệu qua key (như dictionary)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("SELECT * FROM bookings WHERE booking_id = %s", (booking_id,))
         booking = cursor.fetchone()
         conn.close()
         
@@ -69,23 +73,16 @@ def update_booking_status_tool(booking_id: str, new_status: str) -> str:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT booking_id FROM bookings WHERE booking_id = ?", (booking_id,))
+        cursor.execute("SELECT booking_id FROM bookings WHERE booking_id = %s", (booking_id,))
         if not cursor.fetchone():
             conn.close()
             return f"Error: No booking found with ID '{booking_id}'."
             
-        cursor.execute("UPDATE bookings SET status = ? WHERE booking_id = ?", (new_status, booking_id))
+        cursor.execute("UPDATE bookings SET status = %s WHERE booking_id = %s", (new_status, booking_id))
         conn.commit()
         conn.close()
         return f"Successfully updated booking {booking_id} to status: '{new_status}'."
     except Exception as e:
         return f"Failed to update booking status due to database error: {str(e)}"
 
-# IMPORTANT: Group all tools for the agent
 BOOKING_ALL_TOOLS = [create_booking_tool, check_booking_status_tool, update_booking_status_tool]
-
-# ==========================================
-# QUICK TEST
-# ==========================================
-if __name__ == "__main__":
-    print("✅ booking_tool.py loaded successfully. Import paths are correct and tools are ready!")

@@ -17,8 +17,9 @@ class Settings:
     TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
     LANGCHAIN_API_KEY = os.getenv("LANGCHAIN_API_KEY")
     
-    # Các key cho FastAPI (Auth, Redis)
+    # Các key cho FastAPI (Auth, Redis, Database)
     SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-key-change-it-in-production")
     REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:admin123@localhost:5432/fpt_support_db")
 
 settings = Settings()

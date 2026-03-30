@@ -1,19 +1,13 @@
-import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# 1. Lấy đường dẫn thư mục gốc của project (multi_agents_project)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Import settings để lấy chuỗi kết nối PostgreSQL
+from app.core.config import settings
 
-# 2. Trỏ vào thư mục database (tạo mới nếu chưa có)
-DB_DIR = os.path.join(BASE_DIR, "database")
-os.makedirs(DB_DIR, exist_ok=True)
+# Khởi tạo engine kết nối thẳng tới PostgreSQL thông qua chuỗi DATABASE_URL
+# Không cần check_same_thread nữa vì PostgreSQL xử lý đa luồng (multi-thread) mặc định cực tốt
+engine = create_engine(settings.DATABASE_URL)
 
-# 3. Đường dẫn tuyệt đối tới file SQLite
-DATABASE_URL = f"sqlite:///{os.path.join(DB_DIR, 'support_system.db')}"
-
-# Khởi tạo engine
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

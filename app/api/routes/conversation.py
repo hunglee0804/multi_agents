@@ -28,7 +28,7 @@ def chat_with_agent(
 ):
     """Gửi tin nhắn, lưu DB, gọi AI và XÓA CACHE (Cache Invalidation)"""
     
-    # 1. Xử lý tạo title và get/create Conversation (Đã sửa lỗi logic ở đây)
+    # 1. Xử lý tạo title và get/create Conversation 
     title = payload.message[:30] + "..." if len(payload.message) > 30 else payload.message
     conv = conversation_service.create_or_get_conversation(db, current_user.id, payload.conversation_id, title=title)
     
