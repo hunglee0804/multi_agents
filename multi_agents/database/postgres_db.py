@@ -9,14 +9,47 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:admin123@localho
 
 def init_database():
     """
-    Initialize the PostgreSQL database and create necessary tables for the Support System.
+    Initialize the PostgreSQL database and create all 6 necessary tables for the Support System.
     """
     try:
         # Kết nối thẳng tới PostgreSQL
         conn = psycopg2.connect(DATABASE_URL)
         cursor = conn.cursor()
         
-        # Create the Tickets table
+        # 1. Tạo bảng api_users
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS api_users (
+                id TEXT PRIMARY KEY,
+                email TEXT UNIQUE NOT NULL,
+                hashed_password TEXT NOT NULL,
+                full_name TEXT
+            )
+        ''')
+
+        # 2. Tạo bảng api_conversations
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS api_conversations (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES api_users(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # 3. Tạo bảng api_messages
+        # Sử dụng SERIAL cho ID tự tăng nếu ID tin nhắn là số, hoặc TEXT nếu ID là chuỗi UUID. 
+        # (Để tương thích ngược với SQLite trước đây, mình dùng SERIAL làm chuẩn tự tăng)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS api_messages (
+                id SERIAL PRIMARY KEY,
+                conversation_id TEXT NOT NULL REFERENCES api_conversations(id) ON DELETE CASCADE,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # 4. Tạo bảng Tickets 
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS tickets (
                 ticket_id TEXT PRIMARY KEY,
@@ -29,7 +62,8 @@ def init_database():
                 time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        # Create the Bookings Table
+        
+        # 5. Tạo bảng Bookings 
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS bookings (
                 booking_id TEXT PRIMARY KEY,
@@ -44,7 +78,7 @@ def init_database():
             )
         ''')
 
-        # Create the Conversation Context Table
+        # 6. Tạo bảng Conversation Context 
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS conversation_context (
                 conversation_id TEXT PRIMARY KEY,
@@ -54,9 +88,10 @@ def init_database():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+
         conn.commit()
         conn.close()
-        print(f"✅ Database initialized successfully at PostgreSQL!")
+        print(f"✅ Đã tạo thành công toàn bộ 6 bảng tại PostgreSQL!")
     except Exception as e:
         print(f"❌ Failed to initialize database: {e}")
 
