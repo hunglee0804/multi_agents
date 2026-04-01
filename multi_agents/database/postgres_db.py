@@ -22,7 +22,8 @@ def init_database():
                 id TEXT PRIMARY KEY,
                 email TEXT UNIQUE NOT NULL,
                 hashed_password TEXT NOT NULL,
-                full_name TEXT
+                full_name TEXT,
+                employee_id TEXT
             )
         ''')
 
@@ -37,11 +38,9 @@ def init_database():
         ''')
 
         # 3. Tạo bảng api_messages
-        # Sử dụng SERIAL cho ID tự tăng nếu ID tin nhắn là số, hoặc TEXT nếu ID là chuỗi UUID. 
-        # (Để tương thích ngược với SQLite trước đây, mình dùng SERIAL làm chuẩn tự tăng)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS api_messages (
-                id SERIAL PRIMARY KEY,
+                id TEXT PRIMARY KEY, 
                 conversation_id TEXT NOT NULL REFERENCES api_conversations(id) ON DELETE CASCADE,
                 role TEXT NOT NULL,
                 content TEXT NOT NULL,

@@ -1,0 +1,30 @@
+# Version control
+.git/
+.gitignore
+
+# Python artifacts (CỰC KỲ QUAN TRỌNG: Ngăn copy rác vào image)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments (Ngăn copy môi trường ảo nặng hàng trăm MB)
+.venv/
+venv/
+ENV/
+
+# IDE and editors
+.vscode/
+.idea/
+
+# Environment files (Bảo mật: Không ném thẳng file .env chứa API Key vào Image)
+.env
+.env.local
+
+# Docker files 
+Dockerfile*
+docker-compose*.yml
+
+# ĐẶC THÙ DỰ ÁN: Ngăn Backend copy những thứ không thuộc về nó
+frontend/
+README.md

@@ -1,0 +1,97 @@
+version: '3.8'
+
+# BẢO MẬT 1: Cách ly mạng nội bộ (Network Isolation)
+networks:
+  fpt_secure_net:
+    driver: bridge
+
+# BẢO MẬT 2: Data Persistence bằng Named Volumes
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  vector_db_data:
+    driver: local
+
+services:
+  # ==========================================
+  # 1. DATABASE (POSTGRESQL)
+  # ==========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: fpt_postgres
+    restart: unless-stopped
+    networks:
+      - fpt_secure_net
+    # KHÔNG DÙNG 'ports' -> Hacker không thể scan cổng 5432 từ bên ngoài
+    environment:
+      # Đọc trực tiếp từ file .env ẩn ở máy host
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # 2. CACHE (REDIS)
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: fpt_redis
+    restart: unless-stopped
+    networks:
+      - fpt_secure_net
+    # KHÔNG DÙNG 'ports' -> Đóng cổng 6379 với Internet
+    volumes:
+      - redis_data:/data
+
+  # ==========================================
+  # 3. BACKEND (FASTAPI + LANGGRAPH)
+  # ==========================================
+  backend:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    container_name: fpt_ai_backend
+    restart: unless-stopped
+    networks:
+      - fpt_secure_net
+    ports:
+      - "8000:8000"
+    # KHÔNG DÙNG 'ports' -> Đóng cổng 8000. Chỉ Nginx (Frontend) mới gọi được.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      # Lắp ráp chuỗi kết nối động từ các biến bảo mật, không hardcode mật khẩu
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env  # Nạp các API keys (OpenAI, Tavily) từ file ẩn
+    volumes:
+      - vector_db_data:/app/multi_agents/database/multi_vector_db
+
+  # ==========================================
+  # 4. FRONTEND (NGINX REVERSE PROXY)
+  # ==========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: fpt_ai_frontend
+    restart: unless-stopped
+    networks:
+      - fpt_secure_net
+    ports:
+      # ĐÂY LÀ CÁNH CỬA DUY NHẤT MỞ RA THẾ GIỚI BÊN NGOÀI
+      - "80:8080" 
+    depends_on:
+      - backend

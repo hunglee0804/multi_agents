@@ -55,11 +55,11 @@ def reasoner_node(state: BookingState) -> dict:
         f"Use '{conversation_id}' as the conversation_id. "
         "If their name is known, do not ask for it again.\n"
         
-        "\nCRITICAL INSTRUCTION 2: STRICT TOOL CALLING RULES:\n"
-        "- If you need to ask for missing info, confirm details, or say 'I will proceed', just reply with NORMAL TEXT. DO NOT call any tools.\n"
-        "- To perform the actual action, you MUST call the specific database tool (e.g., create_booking_tool or create_ticket_tool).\n"
-        "- NEVER call 'CompleteOrEscalate' to say you are 'proceeding' or 'attempting' to do something.\n"
-        "- ONLY call 'CompleteOrEscalate' AFTER you have actually called the database tool, received the successful DB response, and want to end the task. Put your final summary in the 'reason' parameter."
+        "\nCRITICAL INSTRUCTION 2: STRICT TOOL CALLING RULES (PREVENT HALLUCINATION):\n"
+        "- You are strictly FORBIDDEN from inventing or hallucinating Booking IDs, Ticket IDs, or successful actions.\n"
+        "- To perform the actual action, you MUST physically call the specific database tool (e.g., `create_booking_tool` or `create_ticket_tool`).\n"
+        "- NEVER reply with a success message unless you have called the tool and received the database confirmation.\n"
+        "- ONLY call 'CompleteOrEscalate' AFTER you have successfully called the database tool. Put the REAL ID from the tool response in the summary."
     )
 
     # Override SystemMessage to always update the latest memory

@@ -1,0 +1,10 @@
+# Version control
+.git/
+.gitignore
+
+# IDE and editors
+.vscode/
+.idea/
+
+# Docker
+Dockerfile
